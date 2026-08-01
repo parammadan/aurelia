@@ -20,9 +20,9 @@ flowchart TD
         UPCAST["EventUpcasterRegistry<br/>read-path schema evolution"]
     end
 
-    subgraph STORE["Event store"]
-        FILE[("JSONL file store — today")]
-        COSMOS[("Cosmos DB 🗺️<br/>partition per session")]
+    subgraph STORE["Event store — env-selected, same ADR-0018 contract"]
+        FILE[("JSONL file store — default")]
+        COSMOS[("Cosmos DB — serverless, Entra-only<br/>partition per session, head-doc concurrency")]
         BLOB[("Blob Storage 🗺️<br/>large payloads")]
     end
 
@@ -47,7 +47,7 @@ flowchart TD
     DRIVER --> MODEL
     MODEL -.-> AOAI
     DRIVER -.-> SKMCP
-    FILE -.->|migration path| COSMOS
+    FILE ---|same contract| COSMOS
     COSMOS -.-> BLOB
     OTELN -.-> APPIN
     REPLAY -.-> EVAL
