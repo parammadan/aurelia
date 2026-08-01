@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurelia Playground</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --border: #2a2f3d; --text: #e6e8ee;
+    --muted: #9aa1b2; --intent: #4f8ef7; --success: #3fb96f; --failure: #e5534b;
+    --approval: #e3a008; --comp: #e07b39; --lifecycle: #9d7cd8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--border);
+           border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { color: var(--muted); font-size: 13px; display: block; margin-bottom: 4px; }
+  select, input[type=text] { width: 100%; background: #0d0f15; color: var(--text);
+           border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 14px; }
+  .row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 160px; }
+  button { border: 0; border-radius: 6px; padding: 9px 16px; font-size: 14px;
+           font-weight: 600; cursor: pointer; color: #fff; background: #3b4254; }
+  button:disabled { opacity: .4; cursor: default; }
+  .primary { background: var(--intent); }
+  .chaos { background: var(--failure); font-size: 15px; }
+  .approve { background: var(--success); }
+  .deny { background: var(--failure); }
+  .checkline { display: flex; align-items: center; gap: 8px; color: var(--muted);
+               font-size: 13px; margin-top: 10px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+          font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .pill.running { background: #1d3a5f; color: #7db4f5; }
+  .pill.completed { background: #16391f; color: #62d68a; }
+  .pill.failed { background: #45191c; color: #f08782; }
+  .pill.awaiting_approval { background: #4a3607; color: #f2c14e; }
+  .pill.worker_down { background: #3a3f4d; color: #b7bdcc; }
+  .workers { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+  .workers li { padding: 2px 0; }
+  .dead { color: var(--failure); font-weight: 700; }
+  .timeline { margin: 0; padding: 0; list-style: none; }
+  .timeline li { display: flex; gap: 10px; padding: 6px 8px; border-bottom: 1px solid #202433;
+                 font-size: 13.5px; align-items: baseline; }
+  .timeline li:last-child { border-bottom: 0; }
+  .seq { color: var(--muted); min-width: 26px; text-align: right;
+         font-family: ui-monospace, Menlo, monospace; }
+  .badge { min-width: 92px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+           letter-spacing: .04em; }
+  .badge.intent { color: var(--intent); } .badge.success { color: var(--success); }
+  .badge.failure { color: var(--failure); } .badge.approval { color: var(--approval); }
+  .badge.compensation { color: var(--comp); } .badge.lifecycle { color: var(--lifecycle); }
+  .detail { flex: 1; word-break: break-word; }
+  .key { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .ledger { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted);
+            white-space: pre-wrap; word-break: break-all; }
+  .hidden { display: none; }
+  h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase;
+       letter-spacing: .06em; }
+  .question { font-size: 15px; margin-bottom: 10px; }
+  #replayOut { margin-top: 10px; }
+  .btnrow { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Aurelia Playground</h1>
+  <p class="sub">Durable agent sessions you can kill. The 💥 button SIGKILLs the real worker
+     process mid-task; a fresh process resumes from the event log.</p>
+
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label>Agent</label>
+        <select id="agent">
+          <option value="case-resolution">case-resolution</option>
+          <option value="case-triage">case-triage (model step)</option>
+          <option value="echo">echo</option>
+        </select>
+      </div>
+      <div style="flex:2">
+        <label>Goal</label>
+        <input id="goal" type="text" value="credit for case 42">
+      </div>
+      <div style="flex:0">
+        <button class="primary" id="start">Start session</button>
+      </div>
+    </div>
+    <div class="checkline">
+      <input type="checkbox" id="sabotage">
+      <span>sabotage <code>notify_customer</code> (triggers the saga: credit issued → reversed)</span>
+    </div>
+    <div class="checkline" style="margin-top:4px">
+      <span>tip: goal “credit for case 7” exceeds the $30 approval threshold and pauses for a manager</span>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="session">
+    <h2>Session <span id="sid" class="key"></span> <span id="status" class="pill"></span></h2>
+    <ul class="workers" id="workers"></ul>
+    <div class="btnrow">
+      <button class="chaos" id="chaos">💥 Kill the worker</button>
+      <button id="replay">Replay from log</button>
+    </div>
+    <div id="replayOut" class="ledger"></div>
+  </div>
+
+  <div class="panel hidden" id="approvalPanel">
+    <h2>Awaiting approval</h2>
+    <div class="question" id="question"></div>
+    <div class="btnrow">
+      <button class="approve" id="approveBtn">Approve</button>
+      <button class="deny" id="denyBtn">Deny</button>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="timelinePanel">
+    <h2>Event log</h2>
+    <ul class="timeline" id="timeline"></ul>
+  </div>
+
+  <div class="panel hidden" id="ledgerPanel">
+    <h2>Ledger (the side effects)</h2>
+    <div class="ledger" id="ledger"></div>
+  </div>
+</div>
+
+<script>
+let sessionId = null, timer = null, approvalKey = null;
+const $ = id => document.getElementById(id);
+const api = (path, body) => fetch(path, body === undefined
+  ? undefined
+  : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+).then(r => r.json());
+
+$("start").onclick = async () => {
+  const res = await api("/api/sessions", {
+    agent: $("agent").value, goal: $("goal").value, sabotageNotify: $("sabotage").checked,
+  });
+  sessionId = res.sessionId;
+  $("sid").textContent = sessionId;
+  $("session").classList.remove("hidden");
+  $("timelinePanel").classList.remove("hidden");
+  $("replayOut").textContent = "";
+  if (timer) clearInterval(timer);
+  timer = setInterval(poll, 700);
+};
+
+$("chaos").onclick = () => api(`/api/sessions/${sessionId}/chaos`, {});
+$("replay").onclick = async () => {
+  const r = await api(`/api/sessions/${sessionId}/replay`, {});
+  $("replayOut").textContent = r.ok
+    ? "reconstructed final state (pure fold, nothing re-executed):\n" + r.finalState
+    : "replay: " + r.error;
+};
+$("approveBtn").onclick = () => api(`/api/sessions/${sessionId}/approve`,
+  { key: approvalKey, approved: true, approver: "playground-manager" });
+$("denyBtn").onclick = () => api(`/api/sessions/${sessionId}/approve`,
+  { key: approvalKey, approved: false, approver: "playground-manager" });
+
+async function poll() {
+  if (!sessionId) return;
+  const s = await api(`/api/sessions/${sessionId}`);
+
+  const pill = $("status");
+  pill.textContent = s.status.replaceAll("_", " ");
+  pill.className = "pill " + s.status;
+  $("chaos").disabled = s.status !== "running";
+
+  $("workers").innerHTML = s.workers.map((w, i) =>
+    `<li>worker #${i + 1} · pid ${w.pid} · ` +
+    (w.fate.startsWith("killed") ? `<span class="dead">💀 ${w.fate}</span>` : w.fate) + "</li>"
+  ).join("");
+
+  if (s.status === "awaiting_approval" && s.approval) {
+    approvalKey = s.approval.key;
+    $("question").textContent = s.approval.question + "  (" + s.approval.key + ")";
+    $("approvalPanel").classList.remove("hidden");
+  } else {
+    $("approvalPanel").classList.add("hidden");
+  }
+
+  $("timeline").innerHTML = s.events.map(e =>
+    `<li><span class="seq">${e.seq}</span><span class="badge ${e.kind}">${e.kind}</span>` +
+    `<span class="detail">${escapeHtml(e.detail)}` +
+    (e.key ? ` <span class="key">${e.key}</span>` : "") + `</span></li>`
+  ).join("");
+
+  if (s.ledger.length > 0) {
+    $("ledgerPanel").classList.remove("hidden");
+    $("ledger").textContent = s.ledger.map(l => JSON.stringify(l)).join("\n");
+  }
+
+  if (s.status === "completed" || s.status === "failed") {
+    clearInterval(timer);
+    timer = setInterval(poll, 3000); // keep refreshing slowly for replay use
+  }
+}
+
+function escapeHtml(t) {
+  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+</script>
+</body>
+</html>

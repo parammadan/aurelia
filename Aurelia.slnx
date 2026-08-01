@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Aurelia.Analyzers/Aurelia.Analyzers.csproj" />
     <Project Path="src/Aurelia.Core/Aurelia.Core.csproj" />
+    <Project Path="src/Aurelia.Playground/Aurelia.Playground.csproj" />
     <Project Path="src/Aurelia.Runtime/Aurelia.Runtime.csproj" />
   </Folder>
   <Folder Name="/tests/">
