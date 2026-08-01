@@ -147,13 +147,20 @@ public class ReplayTests
 
     private const string SessionId = "corrupt-session";
 
+    // Writes raw JSONL directly: the store itself now refuses non-contiguous
+    // appends (ADR-0018), but replay must still reject logs corrupted by
+    // other means — so corruption is injected below the store's guard.
     private static async Task<(FileEventStore Store, DirectoryInfo Dir)> StoreWith(params SessionEvent[] events)
     {
         var dir = Directory.CreateTempSubdirectory("aurelia-replay-corrupt-");
-        var store = new FileEventStore(dir.FullName);
-        foreach (var evt in events)
-            await store.AppendAsync(evt);
-        return (store, dir);
+        var web = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        var lines = events.Select(e => System.Text.Json.JsonSerializer.Serialize(new
+        {
+            type = e.GetType().Name,
+            data = System.Text.Json.JsonSerializer.SerializeToElement(e, e.GetType(), web),
+        }, web));
+        await File.WriteAllLinesAsync(Path.Combine(dir.FullName, $"{SessionId}.jsonl"), lines);
+        return (new FileEventStore(dir.FullName), dir);
     }
 
     private static readonly DateTimeOffset T0 = new(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
