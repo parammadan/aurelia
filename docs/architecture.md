@@ -26,9 +26,10 @@ flowchart TD
         BLOB[("Blob Storage 🗺️<br/>large payloads")]
     end
 
-    subgraph INTEL["Intelligence 🗺️"]
-        AOAI["Azure OpenAI<br/>small/fast ↔ large/planner routing"]
-        SKMCP["Semantic Kernel · MCP tools"]
+    subgraph INTEL["Intelligence"]
+        MODEL["IModelClient — today<br/>any OpenAI-compatible endpoint"]
+        AOAI["Azure OpenAI routing 🗺️<br/>small/fast ↔ large/planner"]
+        SKMCP["Semantic Kernel · MCP tools 🗺️"]
     end
 
     subgraph PROOF["Proof layer"]
@@ -43,7 +44,8 @@ flowchart TD
     FILE --> UPCAST --> DRIVER
     FILE --> REPLAY
     DRIVER --> OTELN
-    DRIVER -.-> AOAI
+    DRIVER --> MODEL
+    MODEL -.-> AOAI
     DRIVER -.-> SKMCP
     FILE -.->|migration path| COSMOS
     COSMOS -.-> BLOB

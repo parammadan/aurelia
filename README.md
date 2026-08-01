@@ -129,7 +129,7 @@ Full log, including superseded decisions, in [docs/adr](docs/adr/README.md). The
 Planned ≠ built. Nothing below exists yet.
 
 - 🗺️ Cosmos DB event store (partition per session) with Blob Storage for large payloads
-- 🗺️ Orchestration intelligence: model routing across Azure OpenAI deployments, latency budgets, multi-agent coordination, Semantic Kernel interop
+- 🗺️ Orchestration intelligence: model *routing* across Azure OpenAI deployments, latency budgets, multi-agent coordination, Semantic Kernel interop. (Durable model calls exist today: `--agent case-triage` records the full prompt/model/config as events, substitutes recorded outputs on resume, and talks to any OpenAI-compatible endpoint via `AURELIA_MODEL_ENDPOINT` — a local Ollama, vLLM on a GPU cluster, or Azure OpenAI.)
 - 🗺️ The **Orchestration Reliability Benchmark** — failure-injection scoring of recovery rate and correctness-after-recovery, across frameworks (a thin eval runner exists today: `evals/phase1.json`, run in CI)
 - 🗺️ Hosted playground with a chaos button; trace replay viewer on Application Insights data
 - 🗺️ Teams bot (Azure Bot Service), browser voice, and the mid-session channel handoff
