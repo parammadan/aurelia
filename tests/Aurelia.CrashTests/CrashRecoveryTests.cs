@@ -77,6 +77,11 @@ public class CrashRecoveryTests
 
             using var finalState = JsonDocument.Parse(completed.FinalStateJson);
             Assert.Equal(goal, finalState.RootElement.GetProperty("echoed").GetString());
+
+            // ADR-0004: the crashed-and-recovered session replays to exactly
+            // the state the live run produced.
+            var replayed = await new ReconstructionReplayEngine(store).ReplayAsync(sessionId);
+            Assert.Equal(completed.FinalStateJson, replayed.FinalStateJson);
         }
         finally
         {
