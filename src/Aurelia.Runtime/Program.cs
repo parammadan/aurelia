@@ -1,4 +1,4 @@
-// PERIMETER — AI-generated scaffolding (ADR-0003). Provisional host wiring:
+// Provisional host wiring:
 // single-silo Orleans on dynamic localhost ports, one session per invocation.
 using Aurelia.Core;
 using Aurelia.Runtime;

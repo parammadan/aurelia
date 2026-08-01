@@ -1,7 +1,7 @@
-// PERIMETER — AI-generated scaffolding (ADR-0003). A hard-coded one-tool
-// session script whose only virtue is resumability from the event log. It
-// exists so the crash-recovery harness (ADR-0002) has something real to kill,
-// and it is deleted the day the handwritten execution model lands in Core.
+// A hard-coded one-tool session script whose only virtue is resumability from
+// the event log. It exists so the crash-recovery harness (ADR-0002) has
+// something real to kill, and it is deleted the day the real execution model
+// lands in Core.
 using Aurelia.Core;
 
 namespace Aurelia.Runtime;
@@ -30,11 +30,14 @@ public sealed class ProvisionalSessionDriver(IEventStore store, ITool tool) : IS
             {
                 SessionId = sessionId,
                 Sequence = ++seq,
+                TurnOrdinal = 0,
+                StepOrdinal = 0,
                 RecordedAt = DateTimeOffset.UtcNow,
                 Goal = goal,
             }, ct);
         }
 
+        // The script's single external call: step 0 of turn 0.
         var request = log.OfType<ToolCallRequested>().FirstOrDefault();
         if (request is null)
         {
@@ -42,42 +45,52 @@ public sealed class ProvisionalSessionDriver(IEventStore store, ITool tool) : IS
             {
                 SessionId = sessionId,
                 Sequence = ++seq,
+                TurnOrdinal = 0,
+                StepOrdinal = 0,
                 RecordedAt = DateTimeOffset.UtcNow,
                 ToolName = tool.Name,
                 ArgumentsJson = goal,
-                IdempotencyKey = $"{sessionId}/tool/1",
             };
             await store.AppendAsync(request, ct);
         }
 
-        var completion = log.OfType<ToolCallCompleted>()
-            .FirstOrDefault(c => c.IdempotencyKey == request.IdempotencyKey);
-        if (completion is null)
+        var success = log.OfType<ToolCallSucceeded>()
+            .FirstOrDefault(o => o.IdempotencyKey == request.IdempotencyKey);
+        if (success is null)
         {
-            // Crash recovery lands here: the request is durable but no result
-            // is, so the call re-executes under the same idempotency key.
+            // Crash recovery lands here: the intent is durable but no terminal
+            // outcome is, so the call re-executes under the same key (ADR-0010).
+            var attempt = log.OfType<CallAttemptFailed>()
+                .Count(f => f.IdempotencyKey == request.IdempotencyKey) + 1;
+
             using var toolSpan = AureliaDiagnostics.Source.StartActivity("execute_tool");
             toolSpan?.SetTag("gen_ai.operation.name", "execute_tool");
             toolSpan?.SetTag("gen_ai.tool.name", request.ToolName);
             toolSpan?.SetTag("gen_ai.tool.call.id", request.IdempotencyKey);
             var resultJson = await tool.ExecuteAsync(request.ArgumentsJson, request.IdempotencyKey, ct);
-            completion = new ToolCallCompleted
+
+            success = new ToolCallSucceeded
             {
                 SessionId = sessionId,
                 Sequence = ++seq,
+                // ADR-0012: the outcome inherits its intent's coordinates.
+                TurnOrdinal = request.TurnOrdinal,
+                StepOrdinal = request.StepOrdinal,
                 RecordedAt = DateTimeOffset.UtcNow,
-                IdempotencyKey = request.IdempotencyKey,
+                Attempt = attempt,
                 ResultJson = resultJson,
             };
-            await store.AppendAsync(completion, ct);
+            await store.AppendAsync(success, ct);
         }
 
         var done = new SessionCompleted
         {
             SessionId = sessionId,
             Sequence = ++seq,
+            TurnOrdinal = 0,
+            StepOrdinal = 1,
             RecordedAt = DateTimeOffset.UtcNow,
-            FinalStateJson = completion.ResultJson,
+            FinalStateJson = success.ResultJson,
         };
         await store.AppendAsync(done, ct);
         return new SessionResult(sessionId, done.FinalStateJson);
