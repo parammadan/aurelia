@@ -46,7 +46,7 @@ flowchart TD
 |---|---|---|
 | Crash mid-task → resume with correct state | Event-sourced sessions; every call's intent is durable *before* execution | ✅ tested in CI on every commit |
 | Deterministic replay of any run | Fold-over-log reconstruction; all nondeterminism recorded as events | ✅ tested in CI (reconstruction mode) · 🗺️ fork-based re-execution |
-| Side effects execute exactly-once or compensate | Deterministic idempotency keys + saga compensation | ✅ keys tested in CI · 🔨 unwind engine in progress (event model landed) |
+| Side effects execute exactly-once or compensate | Deterministic idempotency keys + saga compensation | ✅ tested in CI (kill mid-credit → exactly one ledger entry; failed notify → credit reversed) |
 | Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | 🔨 event model landed; runtime support in progress |
 | Mid-session channel handoff | Session–channel decoupling | 🗺️ planned (sessions hold no channel state by design; no channels built yet) |
 
@@ -78,7 +78,7 @@ Assert.Equal(completed.FinalStateJson, replayed.FinalStateJson);       // replay
 
 [The real test](tests/Aurelia.CrashTests/CrashRecoveryTests.cs) · [CI runs](https://github.com/parammadan/aurelia/actions/workflows/ci.yml)
 
-One honest caveat: the tool being killed today is a provisional, deliberately blockable stub standing in for a case-resolution agent's `issue_service_credit` step. The agent is in progress; the contract it must satisfy is already merciless, and it runs on every commit.
+The same harness also kills the case-resolution reference agent mid-`issue_service_credit` and asserts the ledger holds **exactly one** credit after recovery — and, in a separate test, that a failed customer notification triggers the saga unwind: the credit is reversed and the session parks as `SessionFailed` with an explicit list of what was and wasn't compensated.
 
 ## Quick start
 
@@ -90,8 +90,8 @@ git clone https://github.com/parammadan/aurelia && cd aurelia
 # Run the whole suite, including the SIGKILL crash-recovery contract (~5 s):
 dotnet test
 
-# Run a session, then replay it deterministically from its event log:
-dotnet run --project src/Aurelia.Runtime -- run    --session-id demo --goal "issue service credit for case 42" --store-dir /tmp/aurelia
+# Run the case-resolution agent, then replay it deterministically from its event log:
+dotnet run --project src/Aurelia.Runtime -- run    --session-id demo --goal "issue service credit for case 42" --store-dir /tmp/aurelia --agent case-resolution
 dotnet run --project src/Aurelia.Runtime -- replay --session-id demo --store-dir /tmp/aurelia
 ```
 
@@ -125,7 +125,6 @@ Full log, including superseded decisions, in [docs/adr](docs/adr/README.md). The
 
 Planned ≠ built. Nothing below exists yet.
 
-- 🗺️ Saga unwind engine + the case-resolution reference agent (Dataverse-style case lookup, service-credit issuance, Teams escalation)
 - 🗺️ Cosmos DB event store (partition per session) with Blob Storage for large payloads
 - 🗺️ Orchestration intelligence: model routing across Azure OpenAI deployments, latency budgets, multi-agent coordination, Semantic Kernel interop
 - 🗺️ Eval harness and the **Orchestration Reliability Benchmark** — failure-injection scoring of recovery rate and correctness-after-recovery, across frameworks
