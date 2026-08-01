@@ -16,6 +16,9 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0008](0008-external-calls-are-two-phase-events.md) | External calls are two-phase: intent then outcome | Accepted |
 | [0009](0009-per-event-schema-version-with-upcasters.md) | Per-event schema version with upcasters | Accepted |
 | [0010](0010-keys-identify-logical-calls-attempts-numbered.md) | Keys identify logical calls; attempts are numbered | Accepted |
+| [0011](0011-approval-is-a-slow-external-call.md) | Human approval is a slow external call | Accepted |
+| [0012](0012-outcomes-inherit-intent-coordinates.md) | Outcome events inherit their intent's turn/step coordinates | Accepted |
+| [0013](0013-approvals-carry-policy-and-expiry.md) | Approval requests carry policy and optional expiry | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.
