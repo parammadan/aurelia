@@ -6,4 +6,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- ADR-0006 enforcement: reading time or randomness in core is a build
+       error (AUR0006). Build tooling only — no code dependency. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Aurelia.Analyzers\Aurelia.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>

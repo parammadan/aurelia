@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Aurelia.Analyzers/Aurelia.Analyzers.csproj" />
     <Project Path="src/Aurelia.Core/Aurelia.Core.csproj" />
     <Project Path="src/Aurelia.Runtime/Aurelia.Runtime.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Aurelia.AnalyzerTests/Aurelia.AnalyzerTests.csproj" />
     <Project Path="tests/Aurelia.CrashTests/Aurelia.CrashTests.csproj" />
   </Folder>
 </Solution>
