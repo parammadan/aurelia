@@ -48,6 +48,72 @@ public class ReplayTests
         }
     }
 
+    [Fact]
+    public async Task Replay_of_full_saga_unwind_reports_failed_state_with_compensations()
+    {
+        // Refund (step 0) succeeds; notify (step 1) fails terminally; the
+        // refund is compensated (step 2); the session parks as failed
+        // (ADRs 0015-0017). Exercises round-trip of the saga event types.
+        var refundKey = $"{SessionId}/0/0";
+        var (store, dir) = await StoreWith(
+            Started(1),
+            Tool(2, step: 0, "refund"),
+            Succeeded(3, step: 0),
+            Tool(4, step: 1, "notify"),
+            new CallFailed
+            {
+                SessionId = SessionId, Sequence = 5, TurnOrdinal = 0, StepOrdinal = 1,
+                RecordedAt = T0, Attempt = 2, Error = "smtp down",
+            },
+            new CompensationRequested
+            {
+                SessionId = SessionId, Sequence = 6, TurnOrdinal = 0, StepOrdinal = 2,
+                RecordedAt = T0, ToolName = "refund", ArgumentsJson = "{}",
+                CompensatesKey = refundKey,
+            },
+            Succeeded(7, step: 2),
+            new SessionFailed
+            {
+                SessionId = SessionId, Sequence = 8, TurnOrdinal = 0, StepOrdinal = 3,
+                RecordedAt = T0, Reason = "notify failed terminally",
+                CompensatedKeys = [refundKey], UncompensatedKeys = [],
+            });
+        try
+        {
+            var result = await new ReconstructionReplayEngine(store).ReplayAsync(SessionId);
+            using var state = System.Text.Json.JsonDocument.Parse(result.FinalStateJson);
+            Assert.Equal("failed", state.RootElement.GetProperty("status").GetString());
+            Assert.Equal(refundKey, state.RootElement.GetProperty("compensatedKeys")[0].GetString());
+            Assert.Equal(0, state.RootElement.GetProperty("uncompensatedKeys").GetArrayLength());
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Replay_rejects_compensation_of_unknown_key()
+    {
+        var (store, dir) = await StoreWith(
+            Started(1),
+            new CompensationRequested
+            {
+                SessionId = SessionId, Sequence = 2, TurnOrdinal = 0, StepOrdinal = 0,
+                RecordedAt = T0, ToolName = "refund", ArgumentsJson = "{}",
+                CompensatesKey = $"{SessionId}/9/9",
+            });
+        try
+        {
+            await Assert.ThrowsAsync<EventLogIntegrityException>(
+                () => new ReconstructionReplayEngine(store).ReplayAsync(SessionId));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("outcome-without-intent")]
     [InlineData("second-terminal-outcome")]
@@ -96,15 +162,19 @@ public class ReplayTests
         RecordedAt = T0, Goal = "g",
     };
 
-    private static ToolCallRequested ToolRequested(long seq) => new()
+    private static ToolCallRequested ToolRequested(long seq) => Tool(seq, 0, "echo");
+
+    private static ToolCallRequested Tool(long seq, int step, string tool) => new()
     {
-        SessionId = SessionId, Sequence = seq, TurnOrdinal = 0, StepOrdinal = 0,
-        RecordedAt = T0, ToolName = "echo", ArgumentsJson = "g",
+        SessionId = SessionId, Sequence = seq, TurnOrdinal = 0, StepOrdinal = step,
+        RecordedAt = T0, ToolName = tool, ArgumentsJson = "g",
     };
 
-    private static ToolCallSucceeded ToolSucceeded(long seq) => new()
+    private static ToolCallSucceeded ToolSucceeded(long seq) => Succeeded(seq, 0);
+
+    private static ToolCallSucceeded Succeeded(long seq, int step) => new()
     {
-        SessionId = SessionId, Sequence = seq, TurnOrdinal = 0, StepOrdinal = 0,
+        SessionId = SessionId, Sequence = seq, TurnOrdinal = 0, StepOrdinal = step,
         RecordedAt = T0, Attempt = 1, ResultJson = "{}",
     };
 
