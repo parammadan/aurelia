@@ -89,8 +89,72 @@ public class CrashRecoveryTests
         }
     }
 
+    [Fact]
+    public async Task Case_resolution_survives_sigkill_mid_service_credit_with_exactly_one_credit()
+    {
+        var workDir = Directory.CreateTempSubdirectory("aurelia-case-crash-");
+        try
+        {
+            var storeDir = Path.Combine(workDir.FullName, "store");
+            var signalDir = Path.Combine(workDir.FullName, "signals");
+            Directory.CreateDirectory(storeDir);
+            Directory.CreateDirectory(signalDir);
+
+            const string sessionId = "case-crash";
+            const string goal = "service credit for case 42";
+            var blockFile = Path.Combine(signalDir, "block");
+            File.WriteAllText(blockFile, "");
+
+            var firstRun = new StringBuilder();
+            using (var victim = StartHost(sessionId, goal, storeDir, signalDir, firstRun, "case-resolution"))
+            {
+                await WaitUntilAsync(
+                    () => Directory.EnumerateFiles(signalDir, "*.started").Any(),
+                    StartupTimeout,
+                    $"service credit never started; host output:\n{firstRun}");
+                victim.Kill(entireProcessTree: true);
+                victim.WaitForExit();
+            }
+
+            var store = new FileEventStore(storeDir);
+            var afterCrash = await store.ReadAsync(sessionId);
+            var creditIntent = Assert.Single(afterCrash.OfType<ToolCallRequested>(),
+                r => r.ToolName == "issue_service_credit");
+            Assert.DoesNotContain(afterCrash.OfType<CallOutcome>(),
+                o => o.IdempotencyKey == creditIntent.IdempotencyKey);
+            Assert.DoesNotContain(afterCrash, e => e is SessionCompleted or SessionFailed);
+
+            File.Delete(blockFile);
+            var secondRun = new StringBuilder();
+            using (var survivor = StartHost(sessionId, goal, storeDir, signalDir, secondRun, "case-resolution"))
+            {
+                var exited = survivor.WaitForExit((int)CompletionTimeout.TotalMilliseconds);
+                if (!exited)
+                    survivor.Kill(entireProcessTree: true);
+                Assert.True(exited, $"resumed host did not exit; output:\n{secondRun}");
+                Assert.Equal(0, survivor.ExitCode);
+            }
+
+            // The money assertion: exactly one credit in the ledger.
+            var ledger = File.ReadLines(Path.Combine(storeDir, "ledger.jsonl"))
+                .Select(l => JsonDocument.Parse(l).RootElement.GetProperty("type").GetString()!)
+                .ToArray();
+            Assert.Equal(["credit"], ledger);
+
+            var finalLog = await store.ReadAsync(sessionId);
+            var completed = Assert.Single(finalLog.OfType<SessionCompleted>());
+            var replayed = await new ReconstructionReplayEngine(store).ReplayAsync(sessionId);
+            Assert.Equal(completed.FinalStateJson, replayed.FinalStateJson);
+        }
+        finally
+        {
+            workDir.Delete(recursive: true);
+        }
+    }
+
     private static Process StartHost(
-        string sessionId, string goal, string storeDir, string signalDir, StringBuilder output)
+        string sessionId, string goal, string storeDir, string signalDir, StringBuilder output,
+        string agent = "echo")
     {
         // The Runtime executable is copied into the test output directory by
         // the project reference.
@@ -106,6 +170,7 @@ public class CrashRecoveryTests
                 "--session-id", sessionId,
                 "--goal", goal,
                 "--store-dir", storeDir,
+                "--agent", agent,
             },
             RedirectStandardOutput = true,
             RedirectStandardError = true,

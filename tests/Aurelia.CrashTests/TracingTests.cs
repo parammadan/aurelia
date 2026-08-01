@@ -22,8 +22,10 @@ public class TracingTests
         var storeDir = Directory.CreateTempSubdirectory("aurelia-trace-");
         try
         {
-            var driver = new ProvisionalSessionDriver(
-                new FileEventStore(storeDir.FullName), new BlockableEchoTool());
+            var driver = new ScriptedAgentDriver(
+                new FileEventStore(storeDir.FullName),
+                new Dictionary<string, Aurelia.Core.ITool> { ["echo"] = new BlockableEchoTool() },
+                [new ScriptStep("echo", (goal, _) => goal)]);
             await driver.RunToCompletionAsync("trace-session", "hello");
             tracerProvider.ForceFlush();
 

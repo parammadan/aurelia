@@ -15,8 +15,10 @@ public class ReplayTests
         try
         {
             var store = new FileEventStore(dir.FullName);
-            var driver = new ProvisionalSessionDriver(store, new BlockableEchoTool());
-            var live = await driver.RunToCompletionAsync("replay-session", "check order 42");
+            var driver = new ScriptedAgentDriver(store,
+                new Dictionary<string, Aurelia.Core.ITool> { ["echo"] = new BlockableEchoTool() },
+                [new ScriptStep("echo", (goal, _) => goal)]);
+            var live = await driver.RunToCompletionAsync("replay-session", "check case 42");
 
             var engine = new ReconstructionReplayEngine(store);
             var first = await engine.ReplayAsync("replay-session");
