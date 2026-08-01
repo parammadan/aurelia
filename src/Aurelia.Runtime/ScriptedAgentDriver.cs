@@ -27,6 +27,17 @@ public sealed record ModelStep(
     string Name,
     Func<string, IReadOnlyDictionary<string, string>, string> BuildPromptJson) : AgentStep;
 
+/// <summary>
+/// A conditional human-approval gate (ADRs 0011-0013). The predicate is a
+/// pure function over the goal and recorded results, so re-evaluation on
+/// resume is deterministic. A non-null question pauses the session — no
+/// terminal event, just an intent with no outcome — until an ApprovalResolved
+/// outcome arrives from any process, however much later.
+/// </summary>
+public sealed record ApprovalGate(
+    Func<string, IReadOnlyDictionary<string, string>, string?> QuestionIfRequired,
+    string ApproverPolicy) : AgentStep;
+
 public sealed class ScriptedAgentDriver(
     IEventStore store,
     IReadOnlyDictionary<string, ITool> tools,
@@ -65,6 +76,10 @@ public sealed class ScriptedAgentDriver(
         if (priorFailure is not null)
             return await UnwindAsync(priorFailure.Error);
 
+        // Resuming into a session whose approval was denied also unwinds.
+        if (log.OfType<ApprovalResolved>().FirstOrDefault(a => !a.Approved) is { } denied)
+            return await UnwindAsync($"approval denied by {denied.ApproverId}");
+
         // ── Script phase ─────────────────────────────────────────────────────
         var results = new Dictionary<string, string>();
         string? lastResult = null;
@@ -72,6 +87,47 @@ public sealed class ScriptedAgentDriver(
         {
             switch (script[stepIndex])
             {
+                case ApprovalGate gate:
+                {
+                    var question = gate.QuestionIfRequired(goal, results);
+                    if (question is null)
+                        break; // gate not triggered for this session
+
+                    var approval = log.OfType<ApprovalRequested>()
+                        .FirstOrDefault(r => r.StepOrdinal == stepIndex);
+                    if (approval is null)
+                    {
+                        approval = new ApprovalRequested
+                        {
+                            SessionId = sessionId, Sequence = ++seq, TurnOrdinal = 0, StepOrdinal = stepIndex,
+                            RecordedAt = DateTimeOffset.UtcNow,
+                            Question = question,
+                            ApproverPolicy = gate.ApproverPolicy,
+                        };
+                        await Append(approval);
+                    }
+
+                    var resolution = log.OfType<ApprovalResolved>()
+                        .FirstOrDefault(o => o.IdempotencyKey == approval.IdempotencyKey);
+                    if (resolution is null)
+                    {
+                        // ADR-0011: "paused" is derived — an intent with no
+                        // outcome. No terminal event is written; any future
+                        // process picks up from exactly here.
+                        sessionSpan?.SetTag("aurelia.session.awaiting_approval", true);
+                        return new SessionResult(sessionId, JsonSerializer.Serialize(new
+                        {
+                            status = "awaiting_approval",
+                            approvalKey = approval.IdempotencyKey,
+                            question = approval.Question,
+                            approverPolicy = approval.ApproverPolicy,
+                        }));
+                    }
+                    if (!resolution.Approved)
+                        return await UnwindAsync($"approval denied by {resolution.ApproverId}");
+                    break;
+                }
+
                 case ScriptStep tool:
                 {
                     var request = log.OfType<ToolCallRequested>()
