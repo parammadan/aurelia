@@ -1,6 +1,6 @@
 # 0003 — Core/perimeter authorship boundary
 
-- **Status:** Accepted
+- **Status:** Superseded by [0014](0014-retire-authorship-boundary.md)
 - **Date:** 2026-08-01
 - **Author:** Param Madan
 
