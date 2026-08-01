@@ -1,8 +1,7 @@
-// JSONL event store. Appends are atomic and contiguity-checked (ADR-0018):
-// the file is opened exclusively (cross-process), a torn unterminated tail —
-// never durable — is truncated, and the event lands only if its sequence is
-// exactly last + 1. The production store is Cosmos DB (its own design round);
-// the schema persisted here is Core's.
+// JSONL event store — the offline/default backend. Appends are atomic and
+// contiguity-checked (ADR-0018): the file is opened exclusively
+// (cross-process), a torn unterminated tail — never durable — is truncated,
+// and the event lands only if its sequence is exactly last + 1.
 using System.Text;
 using System.Text.Json;
 using Aurelia.Core;
@@ -11,43 +10,15 @@ namespace Aurelia.Runtime;
 
 public sealed class FileEventStore(string directory, EventUpcasterRegistry? upcasters = null) : IEventStore
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan LockRetryDelay = TimeSpan.FromMilliseconds(50);
     private const int LockRetries = 60; // ~3 s of contention tolerance
 
-    private static readonly Dictionary<string, Type> EventTypes = new()
-    {
-        [nameof(SessionStarted)] = typeof(SessionStarted),
-        [nameof(UserMessageReceived)] = typeof(UserMessageReceived),
-        [nameof(AgentMessageSent)] = typeof(AgentMessageSent),
-        [nameof(SessionCompleted)] = typeof(SessionCompleted),
-        [nameof(SessionFailed)] = typeof(SessionFailed),
-        [nameof(ToolCallRequested)] = typeof(ToolCallRequested),
-        [nameof(CompensationRequested)] = typeof(CompensationRequested),
-        [nameof(ModelCallRequested)] = typeof(ModelCallRequested),
-        [nameof(ApprovalRequested)] = typeof(ApprovalRequested),
-        [nameof(TimeRequested)] = typeof(TimeRequested),
-        [nameof(RandomRequested)] = typeof(RandomRequested),
-        [nameof(ToolCallSucceeded)] = typeof(ToolCallSucceeded),
-        [nameof(ModelCallSucceeded)] = typeof(ModelCallSucceeded),
-        [nameof(ApprovalResolved)] = typeof(ApprovalResolved),
-        [nameof(ApprovalExpired)] = typeof(ApprovalExpired),
-        [nameof(TimeProvided)] = typeof(TimeProvided),
-        [nameof(RandomProvided)] = typeof(RandomProvided),
-        [nameof(CallAttemptFailed)] = typeof(CallAttemptFailed),
-        [nameof(CallFailed)] = typeof(CallFailed),
-    };
-
     private readonly EventUpcasterRegistry _upcasters = upcasters ?? new EventUpcasterRegistry();
-
-    public static bool IsValidSessionId(string sessionId) =>
-        sessionId.Length is > 0 and <= 128
-        && sessionId.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-');
 
     public async Task<long> AppendAsync(SessionEvent evt, CancellationToken ct = default)
     {
-        var envelope = new Envelope(evt.GetType().Name, JsonSerializer.SerializeToElement(evt, evt.GetType(), Json));
-        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope, Json) + "\n");
+        var envelope = new Envelope(EventSerialization.TypeName(evt), EventSerialization.Payload(evt));
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope, EventSerialization.Json) + "\n");
         Directory.CreateDirectory(directory);
 
         using var stream = await OpenWithRetryAsync(
@@ -97,11 +68,11 @@ public sealed class FileEventStore(string directory, EventUpcasterRegistry? upca
         return events;
     }
 
-    private string PathFor(string sessionId) =>
-        IsValidSessionId(sessionId)
-            ? Path.Combine(directory, $"{sessionId}.jsonl")
-            : throw new ArgumentException(
-                $"invalid session id '{sessionId}': letters, digits, '.', '_', '-' only", nameof(sessionId));
+    private string PathFor(string sessionId)
+    {
+        SessionIds.Validate(sessionId);
+        return Path.Combine(directory, $"{sessionId}.jsonl");
+    }
 
     // Appends are short-lived, so contention resolves in milliseconds; the
     // retry loop rides out another process holding the exclusive lock.
@@ -138,7 +109,7 @@ public sealed class FileEventStore(string directory, EventUpcasterRegistry? upca
         {
             if (string.IsNullOrWhiteSpace(lines[i]))
                 continue;
-            var envelope = JsonSerializer.Deserialize<Envelope>(lines[i], Json)
+            var envelope = JsonSerializer.Deserialize<Envelope>(lines[i], EventSerialization.Json)
                 ?? throw new JsonException("Null event envelope in log.");
             return (envelope.Data.GetProperty("sequence").GetInt64(), durableLength);
         }
@@ -147,14 +118,9 @@ public sealed class FileEventStore(string directory, EventUpcasterRegistry? upca
 
     private SessionEvent Deserialize(string line)
     {
-        var envelope = JsonSerializer.Deserialize<Envelope>(line, Json)
+        var envelope = JsonSerializer.Deserialize<Envelope>(line, EventSerialization.Json)
             ?? throw new JsonException("Null event envelope.");
-        if (!EventTypes.TryGetValue(envelope.Type, out var type))
-            throw new JsonException($"Unknown event type '{envelope.Type}'.");
-
-        var payload = _upcasters.Upcast(envelope.Type, envelope.Data);
-        return (SessionEvent)(payload.Deserialize(type, Json)
-            ?? throw new JsonException($"Null payload for event type '{envelope.Type}'."));
+        return EventSerialization.Deserialize(envelope.Type, envelope.Data, _upcasters);
     }
 
     private sealed record Envelope(string Type, JsonElement Data);
