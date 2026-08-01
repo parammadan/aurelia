@@ -107,7 +107,7 @@ sealed class SessionHandle(
     private readonly List<WorkerRecord> _workers = [];
     private Process? _current;
 
-    public FileEventStore Store { get; } = new(storeDir);
+    public IEventStore Store { get; } = EventStores.FromEnvironment(storeDir);
 
     public void StartWorker()
     {

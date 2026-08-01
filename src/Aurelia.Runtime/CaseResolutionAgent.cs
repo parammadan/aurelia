@@ -140,6 +140,7 @@ public sealed class ServiceCreditTool(string ledgerPath) : ICompensatableTool
             if (File.Exists(ledgerPath) && File.ReadLines(ledgerPath).Any(existing =>
                     JsonDocument.Parse(existing).RootElement.GetProperty("key").GetString() == key))
                 return;
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(ledgerPath))!);
             File.AppendAllText(ledgerPath, line + Environment.NewLine);
         }
     }

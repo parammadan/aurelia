@@ -4,6 +4,7 @@ using Aurelia.Core;
 using Aurelia.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -30,7 +31,7 @@ for (var i = 1; i < args.Length; i++)
     }
 }
 
-if (sessionId is not null && !FileEventStore.IsValidSessionId(sessionId))
+if (sessionId is not null && !SessionIds.IsValid(sessionId))
 {
     Console.Error.WriteLine($"invalid session id '{sessionId}': letters, digits, '.', '_', '-' only");
     return 2;
@@ -45,7 +46,7 @@ if (args.Length > 0 && args[0] == "approve")
         return 2;
     }
     var resolved = await Approvals.ResolveAsync(
-        new FileEventStore(storeDir), sessionId, approvalKey, approved: !deny, approver);
+        EventStores.FromEnvironment(storeDir), sessionId, approvalKey, approved: !deny, approver);
     if (!resolved)
     {
         Console.Error.WriteLine($"no approval request '{approvalKey}' in session '{sessionId}'");
@@ -81,7 +82,7 @@ if (args.Length > 0 && args[0] == "replay")
         Console.Error.WriteLine("usage: Aurelia.Runtime replay --session-id <id> --store-dir <path>");
         return 2;
     }
-    var replayEngine = new ReconstructionReplayEngine(new FileEventStore(storeDir));
+    var replayEngine = new ReconstructionReplayEngine(EventStores.FromEnvironment(storeDir));
     var replayed = await replayEngine.ReplayAsync(sessionId);
     Console.WriteLine($"REPLAYED_FINAL_STATE {replayed.FinalStateJson}");
     return 0;
@@ -103,8 +104,8 @@ using var host = new HostBuilder()
     .ConfigureLogging(logging => logging.AddConsole().SetMinimumLevel(LogLevel.Warning))
     .ConfigureServices(services =>
     {
-        var eventStore = new FileEventStore(storeDir);
-        services.AddSingleton<IEventStore>(eventStore);
+        var eventStore = EventStores.FromEnvironment(storeDir);
+        services.AddSingleton(eventStore);
         var failNotify = Environment.GetEnvironmentVariable("AURELIA_FAIL_NOTIFY") == "1";
         services.AddSingleton<ISessionRuntime>(agent switch
         {
@@ -127,6 +128,8 @@ using var host = new HostBuilder()
                     tracing.AddOtlpExporter();
                 if (Environment.GetEnvironmentVariable("AURELIA_TRACE_CONSOLE") == "1")
                     tracing.AddConsoleExporter();
+                if (Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING") is { Length: > 0 } aiConnection)
+                    tracing.AddAzureMonitorTraceExporter(o => o.ConnectionString = aiConnection);
             });
     })
     .Build();
