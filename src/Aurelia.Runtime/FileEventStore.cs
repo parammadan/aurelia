@@ -1,14 +1,37 @@
-// PERIMETER — AI-generated scaffolding (ADR-0003). Naive JSONL event store so
-// the crash harness has durable state to resume from. The production store
-// (Cosmos DB) is perimeter too, but the schema it persists is core design work.
+// Naive JSONL event store so the crash harness has durable state to resume
+// from. The production store is Cosmos DB (its own design round); the schema
+// persisted here is Core's.
 using System.Text.Json;
 using Aurelia.Core;
 
 namespace Aurelia.Runtime;
 
-public sealed class FileEventStore(string directory) : IEventStore
+public sealed class FileEventStore(string directory, EventUpcasterRegistry? upcasters = null) : IEventStore
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    private static readonly Dictionary<string, Type> EventTypes = new()
+    {
+        [nameof(SessionStarted)] = typeof(SessionStarted),
+        [nameof(UserMessageReceived)] = typeof(UserMessageReceived),
+        [nameof(AgentMessageSent)] = typeof(AgentMessageSent),
+        [nameof(SessionCompleted)] = typeof(SessionCompleted),
+        [nameof(ToolCallRequested)] = typeof(ToolCallRequested),
+        [nameof(ModelCallRequested)] = typeof(ModelCallRequested),
+        [nameof(ApprovalRequested)] = typeof(ApprovalRequested),
+        [nameof(TimeRequested)] = typeof(TimeRequested),
+        [nameof(RandomRequested)] = typeof(RandomRequested),
+        [nameof(ToolCallSucceeded)] = typeof(ToolCallSucceeded),
+        [nameof(ModelCallSucceeded)] = typeof(ModelCallSucceeded),
+        [nameof(ApprovalResolved)] = typeof(ApprovalResolved),
+        [nameof(ApprovalExpired)] = typeof(ApprovalExpired),
+        [nameof(TimeProvided)] = typeof(TimeProvided),
+        [nameof(RandomProvided)] = typeof(RandomProvided),
+        [nameof(CallAttemptFailed)] = typeof(CallAttemptFailed),
+        [nameof(CallFailed)] = typeof(CallFailed),
+    };
+
+    private readonly EventUpcasterRegistry _upcasters = upcasters ?? new EventUpcasterRegistry();
     private readonly object _gate = new();
 
     public Task<long> AppendAsync(SessionEvent evt, CancellationToken ct = default)
@@ -53,19 +76,15 @@ public sealed class FileEventStore(string directory) : IEventStore
 
     private string PathFor(string sessionId) => Path.Combine(directory, $"{sessionId}.jsonl");
 
-    private static SessionEvent Deserialize(string line)
+    private SessionEvent Deserialize(string line)
     {
         var envelope = JsonSerializer.Deserialize<Envelope>(line, Json)
             ?? throw new JsonException("Null event envelope.");
-        var type = envelope.Type switch
-        {
-            nameof(SessionStarted) => typeof(SessionStarted),
-            nameof(ToolCallRequested) => typeof(ToolCallRequested),
-            nameof(ToolCallCompleted) => typeof(ToolCallCompleted),
-            nameof(SessionCompleted) => typeof(SessionCompleted),
-            _ => throw new JsonException($"Unknown event type '{envelope.Type}'."),
-        };
-        return (SessionEvent)(envelope.Data.Deserialize(type, Json)
+        if (!EventTypes.TryGetValue(envelope.Type, out var type))
+            throw new JsonException($"Unknown event type '{envelope.Type}'.");
+
+        var payload = _upcasters.Upcast(envelope.Type, envelope.Data);
+        return (SessionEvent)(payload.Deserialize(type, Json)
             ?? throw new JsonException($"Null payload for event type '{envelope.Type}'."));
     }
 
