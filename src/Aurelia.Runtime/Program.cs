@@ -12,6 +12,7 @@ using System.Net;
 using System.Net.Sockets;
 
 string? sessionId = null, goal = null, storeDir = null;
+var agent = "echo";
 for (var i = 1; i < args.Length - 1; i++)
 {
     switch (args[i])
@@ -19,6 +20,7 @@ for (var i = 1; i < args.Length - 1; i++)
         case "--session-id": sessionId = args[++i]; break;
         case "--goal": goal = args[++i]; break;
         case "--store-dir": storeDir = args[++i]; break;
+        case "--agent": agent = args[++i]; break;
     }
 }
 
@@ -38,7 +40,7 @@ if (args.Length > 0 && args[0] == "replay")
 
 if (args.Length == 0 || args[0] != "run" || sessionId is null || goal is null || storeDir is null)
 {
-    Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path>");
+    Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path> [--agent echo|case-resolution]");
     Console.Error.WriteLine("       Aurelia.Runtime replay --session-id <id> --store-dir <path>");
     return 2;
 }
@@ -52,9 +54,16 @@ using var host = new HostBuilder()
     .ConfigureLogging(logging => logging.AddConsole().SetMinimumLevel(LogLevel.Warning))
     .ConfigureServices(services =>
     {
-        services.AddSingleton<IEventStore>(new FileEventStore(storeDir));
-        services.AddSingleton<ITool, BlockableEchoTool>();
-        services.AddSingleton<ISessionRuntime, ProvisionalSessionDriver>();
+        var eventStore = new FileEventStore(storeDir);
+        services.AddSingleton<IEventStore>(eventStore);
+        services.AddSingleton<ISessionRuntime>(agent switch
+        {
+            "case-resolution" => CaseResolutionAgent.CreateDriver(eventStore, storeDir,
+                failNotifications: Environment.GetEnvironmentVariable("AURELIA_FAIL_NOTIFY") == "1"),
+            _ => new ScriptedAgentDriver(eventStore,
+                new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
+                [new ScriptStep("echo", (sessionGoal, _) => sessionGoal)]),
+        });
 
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource.AddService("aurelia-runtime"))
