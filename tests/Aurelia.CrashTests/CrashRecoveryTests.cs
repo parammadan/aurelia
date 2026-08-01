@@ -47,7 +47,7 @@ public class CrashRecoveryTests
             var store = new FileEventStore(storeDir);
             var afterCrash = await store.ReadAsync(sessionId);
             Assert.Contains(afterCrash, e => e is ToolCallRequested);
-            Assert.DoesNotContain(afterCrash, e => e is ToolCallCompleted);
+            Assert.DoesNotContain(afterCrash, e => e is CallOutcome);
             Assert.DoesNotContain(afterCrash, e => e is SessionCompleted);
 
             // Phase 2: unblock the tool and start a fresh process, which must
@@ -65,9 +65,15 @@ public class CrashRecoveryTests
 
             var finalLog = await store.ReadAsync(sessionId);
             Assert.Single(finalLog.OfType<SessionStarted>());
-            Assert.Single(finalLog.OfType<ToolCallRequested>());
-            Assert.Single(finalLog.OfType<ToolCallCompleted>());
+            var request = Assert.Single(finalLog.OfType<ToolCallRequested>());
+            var success = Assert.Single(finalLog.OfType<ToolCallSucceeded>());
             var completed = Assert.Single(finalLog.OfType<SessionCompleted>());
+
+            // ADR-0010/0012: the outcome pairs with its intent by key, which
+            // both phases derive from the same inherited coordinates.
+            Assert.Equal($"{sessionId}/0/0", request.IdempotencyKey);
+            Assert.Equal(request.IdempotencyKey, success.IdempotencyKey);
+            Assert.Equal(1, success.Attempt);
 
             using var finalState = JsonDocument.Parse(completed.FinalStateJson);
             Assert.Equal(goal, finalState.RootElement.GetProperty("echoed").GetString());
