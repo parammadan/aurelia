@@ -22,9 +22,24 @@ for (var i = 1; i < args.Length - 1; i++)
     }
 }
 
+// Replay needs no host: reconstruction is a pure fold over the log (ADR-0004).
+if (args.Length > 0 && args[0] == "replay")
+{
+    if (sessionId is null || storeDir is null)
+    {
+        Console.Error.WriteLine("usage: Aurelia.Runtime replay --session-id <id> --store-dir <path>");
+        return 2;
+    }
+    var replayEngine = new ReconstructionReplayEngine(new FileEventStore(storeDir));
+    var replayed = await replayEngine.ReplayAsync(sessionId);
+    Console.WriteLine($"REPLAYED_FINAL_STATE {replayed.FinalStateJson}");
+    return 0;
+}
+
 if (args.Length == 0 || args[0] != "run" || sessionId is null || goal is null || storeDir is null)
 {
     Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path>");
+    Console.Error.WriteLine("       Aurelia.Runtime replay --session-id <id> --store-dir <path>");
     return 2;
 }
 
