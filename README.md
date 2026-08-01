@@ -93,6 +93,9 @@ dotnet test
 # Run the case-resolution agent, then replay it deterministically from its event log:
 dotnet run --project src/Aurelia.Runtime -- run    --session-id demo --goal "issue service credit for case 42" --store-dir /tmp/aurelia --agent case-resolution
 dotnet run --project src/Aurelia.Runtime -- replay --session-id demo --store-dir /tmp/aurelia
+
+# Run the eval suite (10 scenarios: happy paths, sagas, idempotent reruns, replay checks):
+dotnet run --project src/Aurelia.Runtime -- eval --suite evals/phase1.json
 ```
 
 That is everything that works today: build, tests, the demo session, and replay. There is no hosted playground, no Teams bot, and no Cosmos DB deployment yet — see the roadmap.
@@ -127,7 +130,7 @@ Planned ≠ built. Nothing below exists yet.
 
 - 🗺️ Cosmos DB event store (partition per session) with Blob Storage for large payloads
 - 🗺️ Orchestration intelligence: model routing across Azure OpenAI deployments, latency budgets, multi-agent coordination, Semantic Kernel interop
-- 🗺️ Eval harness and the **Orchestration Reliability Benchmark** — failure-injection scoring of recovery rate and correctness-after-recovery, across frameworks
+- 🗺️ The **Orchestration Reliability Benchmark** — failure-injection scoring of recovery rate and correctness-after-recovery, across frameworks (a thin eval runner exists today: `evals/phase1.json`, run in CI)
 - 🗺️ Hosted playground with a chaos button; trace replay viewer on Application Insights data
 - 🗺️ Teams bot (Azure Bot Service), browser voice, and the mid-session channel handoff
 - 🗺️ Copilot Studio integration via MCP

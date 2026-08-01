@@ -17,3 +17,5 @@ jobs:
         run: dotnet build -c Release
       - name: Test (includes the SIGKILL crash-recovery contract)
         run: dotnet test -c Release --no-build --logger "console;verbosity=normal"
+      - name: Eval suite
+        run: dotnet run --project src/Aurelia.Runtime -c Release --no-build -- eval --suite evals/phase1.json
