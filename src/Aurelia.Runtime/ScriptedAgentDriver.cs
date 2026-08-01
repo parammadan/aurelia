@@ -57,7 +57,7 @@ public sealed class ScriptedAgentDriver(
         if (log.OfType<SessionCompleted>().FirstOrDefault() is { } alreadyDone)
             return new SessionResult(sessionId, alreadyDone.FinalStateJson);
         if (log.OfType<SessionFailed>().FirstOrDefault() is { } alreadyFailed)
-            return new SessionResult(sessionId, FailedStateJson(alreadyFailed));
+            return new SessionResult(sessionId, SessionStates.FailedJson(alreadyFailed));
 
         if (log.OfType<SessionStarted>().FirstOrDefault() is { } started)
             goal = started.Goal; // resumed session: the recorded goal wins
@@ -115,13 +115,7 @@ public sealed class ScriptedAgentDriver(
                         // outcome. No terminal event is written; any future
                         // process picks up from exactly here.
                         sessionSpan?.SetTag("aurelia.session.awaiting_approval", true);
-                        return new SessionResult(sessionId, JsonSerializer.Serialize(new
-                        {
-                            status = "awaiting_approval",
-                            approvalKey = approval.IdempotencyKey,
-                            question = approval.Question,
-                            approverPolicy = approval.ApproverPolicy,
-                        }));
+                        return new SessionResult(sessionId, SessionStates.AwaitingApprovalJson(approval));
                     }
                     if (!resolution.Approved)
                         return await UnwindAsync($"approval denied by {resolution.ApproverId}");
@@ -291,7 +285,7 @@ public sealed class ScriptedAgentDriver(
                 UncompensatedKeys = uncompensated,
             };
             await Append(failed);
-            return new SessionResult(sessionId, FailedStateJson(failed));
+            return new SessionResult(sessionId, SessionStates.FailedJson(failed));
         }
 
         // Executes a call with keyed retries: each failed attempt appends a
@@ -359,12 +353,4 @@ public sealed class ScriptedAgentDriver(
                 .OrderBy(f => f.Sequence).LastOrDefault()?.Error ?? "unknown error";
     }
 
-    private static string FailedStateJson(SessionFailed failed) =>
-        JsonSerializer.Serialize(new
-        {
-            status = "failed",
-            reason = failed.Reason,
-            compensatedKeys = failed.CompensatedKeys,
-            uncompensatedKeys = failed.UncompensatedKeys,
-        });
 }
