@@ -10,7 +10,11 @@ public sealed class ProvisionalSessionDriver(IEventStore store, ITool tool) : IS
 {
     public async Task<SessionResult> RunToCompletionAsync(string sessionId, string goal, CancellationToken ct = default)
     {
+        using var sessionSpan = AureliaDiagnostics.Source.StartActivity("session.run");
+        sessionSpan?.SetTag("aurelia.session.id", sessionId);
+
         var log = await store.ReadAsync(sessionId, ct);
+        sessionSpan?.SetTag("aurelia.session.resumed", log.Count > 0);
         var seq = log.Count == 0 ? 0L : log[^1].Sequence;
 
         if (log.OfType<SessionCompleted>().FirstOrDefault() is { } alreadyDone)
@@ -52,6 +56,10 @@ public sealed class ProvisionalSessionDriver(IEventStore store, ITool tool) : IS
         {
             // Crash recovery lands here: the request is durable but no result
             // is, so the call re-executes under the same idempotency key.
+            using var toolSpan = AureliaDiagnostics.Source.StartActivity("execute_tool");
+            toolSpan?.SetTag("gen_ai.operation.name", "execute_tool");
+            toolSpan?.SetTag("gen_ai.tool.name", request.ToolName);
+            toolSpan?.SetTag("gen_ai.tool.call.id", request.IdempotencyKey);
             var resultJson = await tool.ExecuteAsync(request.ArgumentsJson, request.IdempotencyKey, ct);
             completion = new ToolCallCompleted
             {
