@@ -3,6 +3,7 @@
 // re-executed, so replay is deterministic by construction. The fold also
 // verifies the log's structural invariants (ADRs 0007, 0008, 0010, 0012) and
 // fails loudly on any violation — corruption must never reconstruct quietly.
+using System.Text.Json;
 using Aurelia.Core;
 
 namespace Aurelia.Runtime;
@@ -18,6 +19,7 @@ public sealed class ReconstructionReplayEngine(IEventStore store) : IReplayEngin
         long lastSequence = 0;
         SessionStarted? started = null;
         SessionCompleted? completed = null;
+        SessionFailed? failed = null;
         var intents = new Dictionary<string, CallRequested>();
         var terminalOutcomes = new Dictionary<string, CallOutcome>();
 
@@ -37,6 +39,10 @@ public sealed class ReconstructionReplayEngine(IEventStore store) : IReplayEngin
                     break;
 
                 case CallRequested request:
+                    // ADR-0015: a compensation must reference a recorded intent.
+                    if (request is CompensationRequested comp && !intents.ContainsKey(comp.CompensatesKey))
+                        throw new EventLogIntegrityException(sessionId,
+                            $"compensation references unknown key '{comp.CompensatesKey}'");
                     if (!intents.TryAdd(request.IdempotencyKey, request))
                         throw new EventLogIntegrityException(sessionId,
                             $"duplicate intent for key '{request.IdempotencyKey}'");
@@ -58,11 +64,29 @@ public sealed class ReconstructionReplayEngine(IEventStore store) : IReplayEngin
                         throw new EventLogIntegrityException(sessionId, "duplicate SessionCompleted");
                     completed = c;
                     break;
+
+                case SessionFailed f:
+                    if (failed is not null)
+                        throw new EventLogIntegrityException(sessionId, "duplicate SessionFailed");
+                    failed = f;
+                    break;
             }
         }
 
         if (started is null)
             throw new EventLogIntegrityException(sessionId, "no SessionStarted event");
+        // ADR-0017: exactly one terminal state.
+        if (completed is not null && failed is not null)
+            throw new EventLogIntegrityException(sessionId,
+                "both SessionCompleted and SessionFailed present");
+        if (failed is not null)
+            return new SessionResult(sessionId, JsonSerializer.Serialize(new
+            {
+                status = "failed",
+                reason = failed.Reason,
+                compensatedKeys = failed.CompensatedKeys,
+                uncompensatedKeys = failed.UncompensatedKeys,
+            }));
         if (completed is null)
             throw new SessionNotCompletedException(sessionId);
 
