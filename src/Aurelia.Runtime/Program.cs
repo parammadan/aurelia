@@ -30,6 +30,12 @@ for (var i = 1; i < args.Length; i++)
     }
 }
 
+if (sessionId is not null && !FileEventStore.IsValidSessionId(sessionId))
+{
+    Console.Error.WriteLine($"invalid session id '{sessionId}': letters, digits, '.', '_', '-' only");
+    return 2;
+}
+
 // Approving is appending an event; no host needed (ADR-0011).
 if (args.Length > 0 && args[0] == "approve")
 {

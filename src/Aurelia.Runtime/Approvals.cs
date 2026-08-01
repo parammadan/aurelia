@@ -13,25 +13,38 @@ public static class Approvals
         IEventStore store, string sessionId, string approvalKey,
         bool approved, string approverId, CancellationToken ct = default)
     {
-        var log = await store.ReadAsync(sessionId, ct);
-        var pending = log.OfType<ApprovalRequested>()
-            .FirstOrDefault(r => r.IdempotencyKey == approvalKey);
-        if (pending is null)
-            return false;
-        if (log.OfType<ApprovalResolved>().Any(o => o.IdempotencyKey == approvalKey))
-            return true;
-
-        await store.AppendAsync(new ApprovalResolved
+        // Bounded retry on sequence conflicts (ADR-0018): re-reading and
+        // re-appending here is trivially safe, and a concurrent writer may be
+        // appending unrelated events while the approval lands.
+        for (var attempt = 0; ; attempt++)
         {
-            SessionId = sessionId,
-            Sequence = log[^1].Sequence + 1,
-            TurnOrdinal = pending.TurnOrdinal,
-            StepOrdinal = pending.StepOrdinal,
-            RecordedAt = DateTimeOffset.UtcNow,
-            Attempt = 1,
-            Approved = approved,
-            ApproverId = approverId,
-        }, ct);
-        return true;
+            var log = await store.ReadAsync(sessionId, ct);
+            var pending = log.OfType<ApprovalRequested>()
+                .FirstOrDefault(r => r.IdempotencyKey == approvalKey);
+            if (pending is null)
+                return false;
+            if (log.OfType<ApprovalResolved>().Any(o => o.IdempotencyKey == approvalKey))
+                return true;
+
+            try
+            {
+                await store.AppendAsync(new ApprovalResolved
+                {
+                    SessionId = sessionId,
+                    Sequence = log[^1].Sequence + 1,
+                    TurnOrdinal = pending.TurnOrdinal,
+                    StepOrdinal = pending.StepOrdinal,
+                    RecordedAt = DateTimeOffset.UtcNow,
+                    Attempt = 1,
+                    Approved = approved,
+                    ApproverId = approverId,
+                }, ct);
+                return true;
+            }
+            catch (SequenceConflictException) when (attempt < 3)
+            {
+                // Someone appended since we read; fold the fresh log and retry.
+            }
+        }
     }
 }

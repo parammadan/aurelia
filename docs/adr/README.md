@@ -23,6 +23,7 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0015](0015-compensation-is-an-external-call.md) | Compensation is an external call in the log | Accepted |
 | [0016](0016-tools-opt-into-compensation.md) | Tools opt into compensation via ICompensatableTool | Accepted |
 | [0017](0017-failed-compensation-parks-the-session.md) | Failed compensation parks the session as SessionFailed | Accepted |
+| [0018](0018-store-enforces-sequence-contiguity.md) | The store enforces sequence contiguity | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.
