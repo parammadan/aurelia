@@ -1,0 +1,41 @@
+[
+  { "name": "echo-basic", "agent": "echo", "goal": "hello aurelia",
+    "expectFinalContains": ["echoed", "hello aurelia"] },
+
+  { "name": "echo-rerun-idempotent", "agent": "echo", "goal": "same twice", "runTwice": true },
+
+  { "name": "case-42-happy", "agent": "case-resolution", "goal": "service credit for case 42",
+    "expectFinalContains": ["\"notified\":true", "\"caseId\":\"42\""],
+    "expectLedger": ["credit"] },
+
+  { "name": "case-7-happy", "agent": "case-resolution", "goal": "credit for case 7",
+    "expectFinalContains": ["\"caseId\":\"7\""],
+    "expectLedger": ["credit"] },
+
+  { "name": "case-goal-parsing", "agent": "case-resolution", "goal": "pls fix case 42 asap!!",
+    "expectFinalContains": ["\"caseId\":\"42\""],
+    "expectLedger": ["credit"] },
+
+  { "name": "case-rerun-idempotent", "agent": "case-resolution", "goal": "credit for case 42",
+    "runTwice": true,
+    "expectLedger": ["credit"] },
+
+  { "name": "case-saga-notify-fails", "agent": "case-resolution", "goal": "credit for case 42",
+    "failNotifications": true, "expectStatus": "failed",
+    "expectFinalContains": ["notification channel unavailable", "eval/0/1"],
+    "expectLedger": ["credit", "reversal"] },
+
+  { "name": "case-saga-rerun-idempotent", "agent": "case-resolution", "goal": "credit for case 42",
+    "failNotifications": true, "runTwice": true, "expectStatus": "failed",
+    "expectLedger": ["credit", "reversal"] },
+
+  { "name": "case-unknown-case", "agent": "case-resolution", "goal": "credit for case 99",
+    "expectStatus": "failed",
+    "expectFinalContains": ["not found"],
+    "expectLedger": [] },
+
+  { "name": "case-no-case-number", "agent": "case-resolution", "goal": "help me",
+    "expectStatus": "failed",
+    "expectFinalContains": ["not found"],
+    "expectLedger": [] }
+]
