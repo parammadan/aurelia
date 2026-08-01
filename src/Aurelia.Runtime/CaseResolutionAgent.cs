@@ -9,16 +9,35 @@ namespace Aurelia.Runtime;
 
 public static class CaseResolutionAgent
 {
-    public static readonly IReadOnlyList<ScriptStep> Script =
+    public static readonly IReadOnlyList<AgentStep> Script =
     [
-        new("lookup_case", (goal, _) => goal),
-        new("issue_service_credit", (_, results) => results["lookup_case"]),
-        new("notify_customer", (_, results) => results["issue_service_credit"]),
+        new ScriptStep("lookup_case", (goal, _) => goal),
+        new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
+        new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
+    ];
+
+    /// <summary>The triage variant: a durable model call classifies the
+    /// free-text request and extracts the case id before the tool steps.</summary>
+    public static readonly IReadOnlyList<AgentStep> TriageScript =
+    [
+        new ModelStep("classify", (goal, _) => JsonSerializer.Serialize(new object[]
+        {
+            new { role = "system", content = "Extract the customer-service case number from the "
+                + "message. Reply with ONLY a JSON object of the shape {\"caseId\":\"<number>\"}." },
+            new { role = "user", content = goal },
+        })),
+        new ScriptStep("lookup_case", (_, results) => results["classify"]),
+        new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
+        new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
     ];
 
     public static ScriptedAgentDriver CreateDriver(
         IEventStore store, string storeDir, bool failNotifications = false) =>
         new(store, CreateTools(storeDir, failNotifications), Script);
+
+    public static ScriptedAgentDriver CreateTriageDriver(
+        IEventStore store, string storeDir, IModelClient modelClient, bool failNotifications = false) =>
+        new(store, CreateTools(storeDir, failNotifications), TriageScript, modelClient);
 
     public static IReadOnlyDictionary<string, ITool> CreateTools(
         string storeDir, bool failNotifications = false)

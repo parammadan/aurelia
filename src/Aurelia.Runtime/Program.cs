@@ -59,7 +59,7 @@ if (args.Length > 0 && args[0] == "replay")
 
 if (args.Length == 0 || args[0] != "run" || sessionId is null || goal is null || storeDir is null)
 {
-    Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path> [--agent echo|case-resolution]");
+    Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path> [--agent echo|case-resolution|case-triage]");
     Console.Error.WriteLine("       Aurelia.Runtime replay --session-id <id> --store-dir <path>");
     return 2;
 }
@@ -75,10 +75,12 @@ using var host = new HostBuilder()
     {
         var eventStore = new FileEventStore(storeDir);
         services.AddSingleton<IEventStore>(eventStore);
+        var failNotify = Environment.GetEnvironmentVariable("AURELIA_FAIL_NOTIFY") == "1";
         services.AddSingleton<ISessionRuntime>(agent switch
         {
-            "case-resolution" => CaseResolutionAgent.CreateDriver(eventStore, storeDir,
-                failNotifications: Environment.GetEnvironmentVariable("AURELIA_FAIL_NOTIFY") == "1"),
+            "case-resolution" => CaseResolutionAgent.CreateDriver(eventStore, storeDir, failNotify),
+            "case-triage" => CaseResolutionAgent.CreateTriageDriver(eventStore, storeDir,
+                OpenAICompatibleModelClient.FromEnvironmentOrFake(), failNotify),
             _ => new ScriptedAgentDriver(eventStore,
                 new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
                 [new ScriptStep("echo", (sessionGoal, _) => sessionGoal)]),

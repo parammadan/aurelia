@@ -60,6 +60,10 @@ public static class EvalRunner
             ISessionRuntime driver = s.Agent switch
             {
                 "case-resolution" => CaseResolutionAgent.CreateDriver(store, dir.FullName, s.FailNotifications),
+                // Uses the real endpoint when AURELIA_MODEL_ENDPOINT is set,
+                // the deterministic fake otherwise — same suite either way.
+                "case-triage" => CaseResolutionAgent.CreateTriageDriver(store, dir.FullName,
+                    OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications),
                 "echo" => new ScriptedAgentDriver(store,
                     new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
                     [new ScriptStep("echo", (goal, _) => goal)]),
