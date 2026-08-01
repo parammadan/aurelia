@@ -1,15 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// AURELIA CORE — HANDWRITTEN ZONE (owner: Param). Interfaces and placeholder
-// stubs only; see src/Aurelia.Core/README.md and ADR-0003.
+// AURELIA CORE. Design before code: every shape here traces to an accepted
+// ADR in docs/adr.
 // ─────────────────────────────────────────────────────────────────────────────
 namespace Aurelia.Core;
 
 /// <summary>
 /// Append-only store for session events.
 ///
-/// TODO(param): sketch. The real contract needs optimistic concurrency
+/// TODO: sketch. The real contract needs optimistic concurrency
 /// (expected-sequence append), batch reads from a checkpoint, and a decision
-/// on snapshot support — all pending the event schema ADR.
+/// on snapshot support — queued for the durable store (Cosmos) design round.
 /// </summary>
 public interface IEventStore
 {
