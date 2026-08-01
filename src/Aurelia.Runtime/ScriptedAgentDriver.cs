@@ -306,8 +306,13 @@ public sealed class ScriptedAgentDriver(
 
             var attempts = log.OfType<CallAttemptFailed>()
                 .Count(f => f.IdempotencyKey == intent.IdempotencyKey);
+            // Demo pacing (playground): env-gated, perimeter-only slow-down so
+            // a human can land the chaos button mid-call. Off unless set.
+            var stepDelay = Environment.GetEnvironmentVariable("AURELIA_STEP_DELAY_MS");
             while (attempts < maxAttempts)
             {
+                if (int.TryParse(stepDelay, out var delayMs) && delayMs > 0)
+                    await Task.Delay(delayMs, ct);
                 using var span = AureliaDiagnostics.Source.StartActivity(spanName);
                 span?.SetTag("gen_ai.operation.name", spanName);
                 span?.SetTag("gen_ai.tool.name", callee);
