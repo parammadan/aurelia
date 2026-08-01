@@ -9,9 +9,24 @@ namespace Aurelia.Runtime;
 
 public static class CaseResolutionAgent
 {
+    /// <summary>Credits above this threshold pause for manager approval
+    /// (ADR-0011); at or below it, the gate never triggers.</summary>
+    public const decimal ApprovalThresholdUsd = 30m;
+
+    private static readonly ApprovalGate ManagerApproval = new((_, results) =>
+    {
+        using var found = JsonDocument.Parse(results["lookup_case"]);
+        var amount = found.RootElement.GetProperty("entitledCreditUsd").GetDecimal();
+        return amount > ApprovalThresholdUsd
+            ? $"Approve service credit of ${amount} for case " +
+              $"{found.RootElement.GetProperty("caseId").GetString()}?"
+            : null;
+    }, "contact-center-manager");
+
     public static readonly IReadOnlyList<AgentStep> Script =
     [
         new ScriptStep("lookup_case", (goal, _) => goal),
+        ManagerApproval,
         new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
         new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
     ];
@@ -27,6 +42,7 @@ public static class CaseResolutionAgent
             new { role = "user", content = goal },
         })),
         new ScriptStep("lookup_case", (_, results) => results["classify"]),
+        ManagerApproval,
         new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
         new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
     ];

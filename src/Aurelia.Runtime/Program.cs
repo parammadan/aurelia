@@ -11,18 +11,42 @@ using Orleans.Configuration;
 using System.Net;
 using System.Net.Sockets;
 
-string? sessionId = null, goal = null, storeDir = null, suite = null;
+string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null;
 var agent = "echo";
-for (var i = 1; i < args.Length - 1; i++)
+var approver = "cli";
+var deny = false;
+for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
     {
-        case "--session-id": sessionId = args[++i]; break;
-        case "--goal": goal = args[++i]; break;
-        case "--store-dir": storeDir = args[++i]; break;
-        case "--agent": agent = args[++i]; break;
-        case "--suite": suite = args[++i]; break;
+        case "--session-id" when i + 1 < args.Length: sessionId = args[++i]; break;
+        case "--goal" when i + 1 < args.Length: goal = args[++i]; break;
+        case "--store-dir" when i + 1 < args.Length: storeDir = args[++i]; break;
+        case "--agent" when i + 1 < args.Length: agent = args[++i]; break;
+        case "--suite" when i + 1 < args.Length: suite = args[++i]; break;
+        case "--key" when i + 1 < args.Length: approvalKey = args[++i]; break;
+        case "--approver" when i + 1 < args.Length: approver = args[++i]; break;
+        case "--deny": deny = true; break;
     }
+}
+
+// Approving is appending an event; no host needed (ADR-0011).
+if (args.Length > 0 && args[0] == "approve")
+{
+    if (sessionId is null || storeDir is null || approvalKey is null)
+    {
+        Console.Error.WriteLine("usage: Aurelia.Runtime approve --session-id <id> --store-dir <path> --key <approvalKey> [--approver <id>] [--deny]");
+        return 2;
+    }
+    var resolved = await Approvals.ResolveAsync(
+        new FileEventStore(storeDir), sessionId, approvalKey, approved: !deny, approver);
+    if (!resolved)
+    {
+        Console.Error.WriteLine($"no approval request '{approvalKey}' in session '{sessionId}'");
+        return 3;
+    }
+    Console.WriteLine($"{(deny ? "DENIED" : "APPROVED")} {approvalKey} by {approver}");
+    return 0;
 }
 
 // Eval needs no host: scenarios run the drivers in-process.
@@ -105,7 +129,9 @@ await host.StartAsync();
 
 var session = host.Services.GetRequiredService<IGrainFactory>().GetGrain<IAgentSessionGrain>(sessionId);
 var finalState = await session.RunToCompletionAsync(goal);
-Console.WriteLine($"FINAL_STATE {finalState}");
+Console.WriteLine(finalState.Contains("\"status\":\"awaiting_approval\"")
+    ? $"AWAITING_APPROVAL {finalState}"
+    : $"FINAL_STATE {finalState}");
 
 await host.StopAsync();
 return 0;
