@@ -56,6 +56,18 @@ public sealed record SessionCompleted : SessionEvent
     public required string FinalStateJson { get; init; }
 }
 
+/// <summary>
+/// Second terminal state (ADR-0017): the session failed and, after unwinding,
+/// is parked for human resolution. Exactly one of
+/// <see cref="SessionCompleted"/> or <see cref="SessionFailed"/> may appear.
+/// </summary>
+public sealed record SessionFailed : SessionEvent
+{
+    public required string Reason { get; init; }
+    public required IReadOnlyList<string> CompensatedKeys { get; init; }
+    public required IReadOnlyList<string> UncompensatedKeys { get; init; }
+}
+
 // ── External calls: intent phase (ADR-0008) ──────────────────────────────────
 // An intent is durable BEFORE execution begins. An intent with no terminal
 // outcome means the call may have executed and may have had side effects.
@@ -99,6 +111,19 @@ public sealed record ApprovalRequested : CallRequested
     public required string Question { get; init; }
     public required string ApproverPolicy { get; init; }
     public DateTimeOffset? ExpiresAt { get; init; }
+}
+
+/// <summary>
+/// Saga compensation is itself an external call (ADR-0015): this intent is
+/// durable before the compensating action runs, and its outcomes arrive under
+/// the compensation's own key. <see cref="CompensatesKey"/> must reference a
+/// recorded intent. Unwinding runs in reverse order of success.
+/// </summary>
+public sealed record CompensationRequested : CallRequested
+{
+    public required string ToolName { get; init; }
+    public required string ArgumentsJson { get; init; }
+    public required string CompensatesKey { get; init; }
 }
 
 /// <summary>Injected logical time (ADR-0006): core asks, the runtime answers
@@ -161,8 +186,8 @@ public sealed record CallAttemptFailed : CallOutcome
 }
 
 /// <summary>Terminal failure: retries exhausted or the error is not
-/// retryable. For side-effectful calls this is where saga compensation is
-/// triggered (contract pending its own ADR).</summary>
+/// retryable. For side-effectful calls this is what triggers the saga unwind
+/// (ADRs 0015–0017).</summary>
 public sealed record CallFailed : CallOutcome
 {
     public required string Error { get; init; }

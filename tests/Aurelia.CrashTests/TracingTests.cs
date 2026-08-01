@@ -27,12 +27,17 @@ public class TracingTests
             await driver.RunToCompletionAsync("trace-session", "hello");
             tracerProvider.ForceFlush();
 
-            var sessionSpan = Assert.Single(exported, a => a.OperationName == "session.run");
-            Assert.Equal("trace-session", sessionSpan.GetTagItem("aurelia.session.id"));
+            // Filter by session id: the ActivitySource is global, so spans
+            // from other tests running in parallel land in the same exporter.
+            Activity[] snapshot;
+            lock (exported)
+                snapshot = [.. exported];
+            var sessionSpan = Assert.Single(snapshot, a => a.OperationName == "session.run"
+                && (string?)a.GetTagItem("aurelia.session.id") == "trace-session");
 
-            var toolSpan = Assert.Single(exported, a => a.OperationName == "execute_tool");
+            var toolSpan = Assert.Single(snapshot, a => a.OperationName == "execute_tool"
+                && a.ParentSpanId == sessionSpan.SpanId);
             Assert.Equal("echo", toolSpan.GetTagItem("gen_ai.tool.name"));
-            Assert.Equal(sessionSpan.SpanId, toolSpan.ParentSpanId);
         }
         finally
         {
