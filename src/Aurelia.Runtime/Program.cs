@@ -5,6 +5,8 @@ using Aurelia.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Orleans.Configuration;
 using System.Net;
 using System.Net.Sockets;
@@ -38,6 +40,19 @@ using var host = new HostBuilder()
         services.AddSingleton<IEventStore>(new FileEventStore(storeDir));
         services.AddSingleton<ITool, BlockableEchoTool>();
         services.AddSingleton<ISessionRuntime, ProvisionalSessionDriver>();
+
+        services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService("aurelia-runtime"))
+            .WithTracing(tracing =>
+            {
+                tracing.AddSource(AureliaDiagnostics.SourceName);
+                // Standard OTLP env vars drive the exporter; only attach it
+                // when an endpoint is configured so local runs stay quiet.
+                if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is not null)
+                    tracing.AddOtlpExporter();
+                if (Environment.GetEnvironmentVariable("AURELIA_TRACE_CONSOLE") == "1")
+                    tracing.AddConsoleExporter();
+            });
     })
     .Build();
 
