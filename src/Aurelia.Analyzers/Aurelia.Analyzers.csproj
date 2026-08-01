@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- PERIMETER (ADR-0003). Build-time enforcement of ADR-0006 inside the
-       core boundary; analyzers must target netstandard2.0 to load in the
-       compiler. -->
+  <!-- Build-time enforcement of ADR-0006 inside Aurelia.Core; analyzers must
+       target netstandard2.0 to load in the compiler. -->
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>

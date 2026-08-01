@@ -25,8 +25,8 @@ Phase 1 (durable execution core), day one. What exists today:
 
 | Path | What it is |
 |------|------------|
-| `src/Aurelia.Core` | The handwritten zone: execution model, event schema, tool contract, replay semantics. Interfaces and stubs today. See [ADR-0003](docs/adr/0003-core-perimeter-authorship-boundary.md). |
-| `src/Aurelia.Runtime` | Perimeter: Orleans host, provisional session driver, file-backed event store. |
+| `src/Aurelia.Core` | The core: event schema (ADRs 0004–0013), tool contract, execution and replay interfaces. Changes merge only through reviewed PRs ([ADR-0014](docs/adr/0014-retire-authorship-boundary.md)). |
+| `src/Aurelia.Runtime` | Orleans host, provisional session driver, file-backed event store, upcaster registry. |
 | `tests/Aurelia.CrashTests` | The kill/resume harness — the CI contract. |
 | `docs/adr` | Architecture Decision Records. Every core design decision lands here before code. |
 

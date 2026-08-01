@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// AURELIA CORE — HANDWRITTEN ZONE (owner: Param). Interfaces and placeholder
-// stubs only; see src/Aurelia.Core/README.md and ADR-0003.
+// AURELIA CORE. Design before code: every shape here traces to an accepted
+// ADR in docs/adr.
 // ─────────────────────────────────────────────────────────────────────────────
 namespace Aurelia.Core;
 
@@ -10,7 +10,7 @@ namespace Aurelia.Core;
 /// That property — resumability from the log alone — is the contract the
 /// crash-recovery harness enforces (ADR-0002).
 ///
-/// TODO(param): sketch. The real execution model (turn loop, model calls,
+/// TODO: sketch. The real execution model (turn loop, model calls,
 /// pause/resume for human approval) replaces this single-shot signature.
 /// </summary>
 public interface ISessionRuntime

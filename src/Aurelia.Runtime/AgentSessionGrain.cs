@@ -1,4 +1,4 @@
-// PERIMETER — AI-generated scaffolding (ADR-0003). Thin Orleans adapter: the
+// Thin Orleans adapter: the
 // grain is the addressable surface for a session, but all state lives in the
 // event store, never in the grain. Session-channel decoupling starts here.
 using Aurelia.Core;

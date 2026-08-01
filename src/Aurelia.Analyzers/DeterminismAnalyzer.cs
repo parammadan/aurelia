@@ -1,6 +1,5 @@
-// PERIMETER — AI-generated scaffolding (ADR-0003). Compiler enforcement of
-// ADR-0006: core code may not read time or randomness directly. Wired into
-// src/Aurelia.Core only; violations are build errors.
+// Enforces ADR-0006: core code may not read time or randomness directly.
+// Wired into src/Aurelia.Core only; violations are build errors.
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;

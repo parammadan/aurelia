@@ -1,4 +1,4 @@
-// PERIMETER — AI-generated scaffolding (ADR-0003). Test tool for the crash
+// Test tool for the crash
 // harness: signals when execution starts (so the test knows when to kill the
 // process) and blocks while a "block" file exists (so the kill lands
 // mid-tool-call deterministically).
