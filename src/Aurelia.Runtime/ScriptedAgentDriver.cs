@@ -1,25 +1,37 @@
-// The scripted execution engine: runs a fixed sequence of tool steps with
+// The scripted execution engine: runs a fixed sequence of steps with
 // resumability from the event log at every point — fresh, mid-step after a
 // crash, mid-retry, or mid-unwind. Implements the two-phase call protocol
-// (ADR-0008), keyed retries (ADR-0010), and the saga unwind (ADRs 0015-0017).
-// LLM-planned (non-scripted) execution is the Phase 2 execution model; this
-// engine is what the reference agents run on until then.
+// (ADR-0008), keyed retries (ADR-0010), durable model calls (ADR-0004), and
+// the saga unwind (ADRs 0015-0017). LLM-planned (non-scripted) execution is
+// the Phase 2 execution model; the reference agents run on this until then.
 using System.Text.Json;
 using Aurelia.Core;
 
 namespace Aurelia.Runtime;
 
-/// <summary>One step of a script: which tool to call and how to build its
-/// arguments from the session goal and the results of prior steps
-/// (keyed by tool name).</summary>
+public abstract record AgentStep;
+
+/// <summary>One tool step: which tool to call and how to build its arguments
+/// from the session goal and the results of prior steps (keyed by name).</summary>
 public sealed record ScriptStep(
     string ToolName,
-    Func<string, IReadOnlyDictionary<string, string>, string> BuildArguments);
+    Func<string, IReadOnlyDictionary<string, string>, string> BuildArguments) : AgentStep;
+
+/// <summary>
+/// One model step: builds a chat prompt from the goal and prior results. The
+/// call is durable two-phase — the intent records the full prompt, model id,
+/// parameters, and config version (ADR-0004); a completed call is substituted
+/// from the log on resume and never re-executed.
+/// </summary>
+public sealed record ModelStep(
+    string Name,
+    Func<string, IReadOnlyDictionary<string, string>, string> BuildPromptJson) : AgentStep;
 
 public sealed class ScriptedAgentDriver(
     IEventStore store,
     IReadOnlyDictionary<string, ITool> tools,
-    IReadOnlyList<ScriptStep> script,
+    IReadOnlyList<AgentStep> script,
+    IModelClient? modelClient = null,
     int maxAttempts = 2) : ISessionRuntime
 {
     public async Task<SessionResult> RunToCompletionAsync(string sessionId, string goal, CancellationToken ct = default)
@@ -48,42 +60,104 @@ public sealed class ScriptedAgentDriver(
         // Resuming into a session whose script phase already failed terminally
         // goes straight to the unwind.
         var priorFailure = log.OfType<CallFailed>()
-            .FirstOrDefault(f => log.OfType<ToolCallRequested>()
-                .Any(r => r.IdempotencyKey == f.IdempotencyKey));
+            .FirstOrDefault(f => log.OfType<CallRequested>()
+                .Any(r => r is not CompensationRequested && r.IdempotencyKey == f.IdempotencyKey));
         if (priorFailure is not null)
             return await UnwindAsync(priorFailure.Error);
 
         // ── Script phase ─────────────────────────────────────────────────────
         var results = new Dictionary<string, string>();
+        string? lastResult = null;
         for (var stepIndex = 0; stepIndex < script.Count; stepIndex++)
         {
-            var step = script[stepIndex];
-            var request = log.OfType<ToolCallRequested>()
-                .FirstOrDefault(r => r.StepOrdinal == stepIndex);
-            if (request is null)
+            switch (script[stepIndex])
             {
-                request = new ToolCallRequested
+                case ScriptStep tool:
                 {
-                    SessionId = sessionId, Sequence = ++seq, TurnOrdinal = 0, StepOrdinal = stepIndex,
-                    RecordedAt = DateTimeOffset.UtcNow,
-                    ToolName = step.ToolName,
-                    ArgumentsJson = step.BuildArguments(goal, results),
-                };
-                await Append(request);
+                    var request = log.OfType<ToolCallRequested>()
+                        .FirstOrDefault(r => r.StepOrdinal == stepIndex);
+                    if (request is null)
+                    {
+                        request = new ToolCallRequested
+                        {
+                            SessionId = sessionId, Sequence = ++seq, TurnOrdinal = 0, StepOrdinal = stepIndex,
+                            RecordedAt = DateTimeOffset.UtcNow,
+                            ToolName = tool.ToolName,
+                            ArgumentsJson = tool.BuildArguments(goal, results),
+                        };
+                        await Append(request);
+                    }
+
+                    var resultJson = log.OfType<ToolCallSucceeded>()
+                        .FirstOrDefault(o => o.IdempotencyKey == request.IdempotencyKey)?.ResultJson;
+                    if (resultJson is null)
+                    {
+                        var call = await ExecuteCallAsync(request, "execute_tool", request.ToolName,
+                            token => tools[request.ToolName].ExecuteAsync(request.ArgumentsJson, request.IdempotencyKey, token));
+                        if (call is null)
+                            return await UnwindAsync(LastError(request.IdempotencyKey));
+                        await Append(new ToolCallSucceeded
+                        {
+                            SessionId = sessionId, Sequence = ++seq,
+                            TurnOrdinal = request.TurnOrdinal, StepOrdinal = request.StepOrdinal,
+                            RecordedAt = DateTimeOffset.UtcNow,
+                            Attempt = call.Value.Attempt, ResultJson = call.Value.Result,
+                        });
+                        resultJson = call.Value.Result;
+                    }
+
+                    results[tool.ToolName] = resultJson;
+                    lastResult = resultJson;
+                    break;
+                }
+
+                case ModelStep model:
+                {
+                    var client = modelClient
+                        ?? throw new InvalidOperationException($"script has model step '{model.Name}' but no model client is configured");
+                    var request = log.OfType<ModelCallRequested>()
+                        .FirstOrDefault(r => r.StepOrdinal == stepIndex);
+                    if (request is null)
+                    {
+                        request = new ModelCallRequested
+                        {
+                            SessionId = sessionId, Sequence = ++seq, TurnOrdinal = 0, StepOrdinal = stepIndex,
+                            RecordedAt = DateTimeOffset.UtcNow,
+                            ModelId = client.ModelId,
+                            PromptJson = model.BuildPromptJson(goal, results),
+                            ParametersJson = client.ParametersJson,
+                            ConfigVersion = client.ConfigVersion,
+                        };
+                        await Append(request);
+                    }
+
+                    // ADR-0004: a recorded outcome is substituted, never re-run.
+                    var outputJson = log.OfType<ModelCallSucceeded>()
+                        .FirstOrDefault(o => o.IdempotencyKey == request.IdempotencyKey)?.OutputJson;
+                    if (outputJson is null)
+                    {
+                        var call = await ExecuteCallAsync(request, "invoke_model", request.ModelId,
+                            token => client.CompleteAsync(request.PromptJson, token));
+                        if (call is null)
+                            return await UnwindAsync(LastError(request.IdempotencyKey));
+                        await Append(new ModelCallSucceeded
+                        {
+                            SessionId = sessionId, Sequence = ++seq,
+                            TurnOrdinal = request.TurnOrdinal, StepOrdinal = request.StepOrdinal,
+                            RecordedAt = DateTimeOffset.UtcNow,
+                            Attempt = call.Value.Attempt, OutputJson = call.Value.Result,
+                        });
+                        outputJson = call.Value.Result;
+                    }
+
+                    results[model.Name] = outputJson;
+                    lastResult = outputJson;
+                    break;
+                }
             }
-
-            var success = log.OfType<ToolCallSucceeded>()
-                .FirstOrDefault(o => o.IdempotencyKey == request.IdempotencyKey)
-                ?? await RunCallAsync(request, "execute_tool", request.ToolName,
-                    token => tools[request.ToolName].ExecuteAsync(request.ArgumentsJson, request.IdempotencyKey, token));
-
-            if (success is null)
-                return await UnwindAsync(LastError(request.IdempotencyKey));
-
-            results[step.ToolName] = success.ResultJson;
         }
 
-        var final = results[script[^1].ToolName];
+        var final = lastResult ?? "{}";
         await Append(new SessionCompleted
         {
             SessionId = sessionId, Sequence = ++seq, TurnOrdinal = 0, StepOrdinal = script.Count,
@@ -96,7 +170,7 @@ public sealed class ScriptedAgentDriver(
         {
             sessionSpan?.SetTag("aurelia.session.unwinding", true);
 
-            // Succeeded, compensatable script calls, newest first.
+            // Succeeded, compensatable tool calls, newest first.
             var toCompensate = log.OfType<ToolCallSucceeded>()
                 .Select(ok => (Outcome: ok, Intent: log.OfType<ToolCallRequested>()
                     .FirstOrDefault(r => r.IdempotencyKey == ok.IdempotencyKey)))
@@ -131,11 +205,21 @@ public sealed class ScriptedAgentDriver(
                 if (!compensationDone)
                 {
                     var tool = (ICompensatableTool)tools[compensation.ToolName];
-                    var ok = await RunCallAsync(compensation, "compensate_tool", compensation.ToolName,
+                    var call = await ExecuteCallAsync(compensation, "compensate_tool", compensation.ToolName,
                         token => tool.CompensateAsync(
                             compensation.ArgumentsJson, outcome.ResultJson,
                             compensation.IdempotencyKey, token));
-                    compensationDone = ok is not null;
+                    if (call is not null)
+                    {
+                        await Append(new ToolCallSucceeded
+                        {
+                            SessionId = sessionId, Sequence = ++seq,
+                            TurnOrdinal = compensation.TurnOrdinal, StepOrdinal = compensation.StepOrdinal,
+                            RecordedAt = DateTimeOffset.UtcNow,
+                            Attempt = call.Value.Attempt, ResultJson = call.Value.Result,
+                        });
+                        compensationDone = true;
+                    }
                 }
 
                 (compensationDone ? compensated : uncompensated).Add(intent!.IdempotencyKey);
@@ -156,9 +240,9 @@ public sealed class ScriptedAgentDriver(
 
         // Executes a call with keyed retries: each failed attempt appends a
         // non-terminal CallAttemptFailed; exhaustion appends a terminal
-        // CallFailed. Returns null on terminal failure.
-        async Task<ToolCallSucceeded?> RunCallAsync(
-            CallRequested intent, string spanName, string toolName,
+        // CallFailed and returns null. The caller appends the typed success.
+        async Task<(string Result, int Attempt)?> ExecuteCallAsync(
+            CallRequested intent, string spanName, string callee,
             Func<CancellationToken, Task<string>> action)
         {
             if (log.OfType<CallFailed>().Any(f => f.IdempotencyKey == intent.IdempotencyKey))
@@ -170,21 +254,12 @@ public sealed class ScriptedAgentDriver(
             {
                 using var span = AureliaDiagnostics.Source.StartActivity(spanName);
                 span?.SetTag("gen_ai.operation.name", spanName);
-                span?.SetTag("gen_ai.tool.name", toolName);
+                span?.SetTag("gen_ai.tool.name", callee);
                 span?.SetTag("gen_ai.tool.call.id", intent.IdempotencyKey);
                 try
                 {
-                    var resultJson = await action(ct);
-                    var ok = new ToolCallSucceeded
-                    {
-                        SessionId = sessionId, Sequence = ++seq,
-                        // ADR-0012: outcomes inherit the intent's coordinates.
-                        TurnOrdinal = intent.TurnOrdinal, StepOrdinal = intent.StepOrdinal,
-                        RecordedAt = DateTimeOffset.UtcNow,
-                        Attempt = attempts + 1, ResultJson = resultJson,
-                    };
-                    await Append(ok);
-                    return ok;
+                    var result = await action(ct);
+                    return (result, attempts + 1);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
