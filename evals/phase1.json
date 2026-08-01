@@ -37,5 +37,15 @@
   { "name": "case-no-case-number", "agent": "case-resolution", "goal": "help me",
     "expectStatus": "failed",
     "expectFinalContains": ["not found"],
-    "expectLedger": [] }
+    "expectLedger": [] },
+
+  { "name": "triage-42-happy", "agent": "case-triage",
+    "goal": "my invoice is wrong, please credit case 42",
+    "expectFinalContains": ["\"caseId\":\"42\""],
+    "expectLedger": ["credit"] },
+
+  { "name": "triage-saga-notify-fails", "agent": "case-triage",
+    "goal": "please credit case 42",
+    "failNotifications": true, "expectStatus": "failed",
+    "expectLedger": ["credit", "reversal"] }
 ]
