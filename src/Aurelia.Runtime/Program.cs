@@ -11,7 +11,7 @@ using Orleans.Configuration;
 using System.Net;
 using System.Net.Sockets;
 
-string? sessionId = null, goal = null, storeDir = null;
+string? sessionId = null, goal = null, storeDir = null, suite = null;
 var agent = "echo";
 for (var i = 1; i < args.Length - 1; i++)
 {
@@ -21,7 +21,26 @@ for (var i = 1; i < args.Length - 1; i++)
         case "--goal": goal = args[++i]; break;
         case "--store-dir": storeDir = args[++i]; break;
         case "--agent": agent = args[++i]; break;
+        case "--suite": suite = args[++i]; break;
     }
+}
+
+// Eval needs no host: scenarios run the drivers in-process.
+if (args.Length > 0 && args[0] == "eval")
+{
+    if (suite is null)
+    {
+        Console.Error.WriteLine("usage: Aurelia.Runtime eval --suite <path>");
+        return 2;
+    }
+    var outcomes = await EvalRunner.RunSuiteAsync(suite);
+    foreach (var o in outcomes)
+        Console.WriteLine($"{(o.Passed ? "PASS" : "FAIL"),-4} {o.Name,-28} {o.DurationMs,7:F0} ms  {o.Failure}");
+    var durations = outcomes.Select(o => o.DurationMs).OrderBy(d => d).ToArray();
+    var p50 = durations[durations.Length / 2];
+    var p95 = durations[Math.Min(durations.Length - 1, (int)(durations.Length * 0.95))];
+    Console.WriteLine($"{outcomes.Count(o => o.Passed)}/{outcomes.Count} passed · p50 {p50:F0} ms · p95 {p95:F0} ms");
+    return outcomes.All(o => o.Passed) ? 0 : 1;
 }
 
 // Replay needs no host: reconstruction is a pure fold over the log (ADR-0004).
