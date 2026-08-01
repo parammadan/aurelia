@@ -1,40 +1,140 @@
 # Aurelia
 
-**A durable agent orchestration runtime.** Checkpointed, replayable, observable
-agent execution — an agent session that survives the death of the process
-running it.
+**A durable execution runtime for AI agents — agents that survive crashes, replay deterministically, and never double-execute a side effect.**
 
-> Temporal for agents, built on Azure, that can lose a pod mid-refund and
-> finish the refund anyway.
+[![ci](https://github.com/parammadan/aurelia/actions/workflows/ci.yml/badge.svg)](https://github.com/parammadan/aurelia/actions/workflows/ci.yml)
+![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)
 
-## Status
+## The Problem
 
-Phase 1 (durable execution core), day one. What exists today:
+A customer-service agent — the kind Copilot Studio powers for a Dynamics 365 Contact Center — is mid-case. It has pulled the case from Dataverse, verified the customer, and is halfway through issuing a service credit when its pod is rescheduled. Today's agent frameworks keep the session in process memory, so everything dies with the process: the conversation, the plan, and — worst — the answer to *"was the credit issued?"* Nobody knows. The customer calls back to an agent with amnesia, and a DRI reconciles the ledger by hand.
 
-- A solution scaffold: core contracts, an Orleans-hosted runtime, and a
-  crash-recovery harness.
-- **The contract, enforced in CI from the first commit:** a test that SIGKILLs
-  the host mid-tool-call, restarts it, and asserts the session resumes from
-  the event log and completes with the correct final state
-  ([ADR-0002](docs/adr/0002-crash-recovery-harness-is-the-ci-contract.md)).
-  It currently passes against a provisional, deliberately disposable session
-  driver; the handwritten execution model replaces it from the inside without
-  the contract ever loosening.
+Workflow engines solved crash recovery a decade ago — Azure Durable Functions, the Durable Task Framework, Temporal — by replaying deterministic orchestration code against a history of recorded results. Agents break that model's core assumption: their orchestration logic *contains LLM calls*, which are nondeterministic even at temperature zero. You cannot re-run the plan and expect the same plan.
 
-## Layout
+Aurelia is what durable execution looks like when it is redesigned for agents.
 
-| Path | What it is |
-|------|------------|
-| `src/Aurelia.Core` | The core: event schema (ADRs 0004–0013), tool contract, execution and replay interfaces. Changes merge only through reviewed PRs ([ADR-0014](docs/adr/0014-retire-authorship-boundary.md)). |
-| `src/Aurelia.Runtime` | Orleans host, provisional session driver, file-backed event store, upcaster registry. |
-| `tests/Aurelia.CrashTests` | The kill/resume harness — the CI contract. |
-| `docs/adr` | Architecture Decision Records. Every core design decision lands here before code. |
+## Architecture in 90 seconds
 
-## Run the contract
+```mermaid
+flowchart TD
+    subgraph CH["Channels — adapters only; state never lives here"]
+        WEB["Web"]
+        TEAMS["Teams"]
+        VOICE["Voice"]
+        CS["Copilot Studio (via MCP)"]
+    end
+    SESSION["Durable Agent Session<br/>(Orleans actor — holds no state)"]
+    LOG[("Append-only Event Log<br/>today: JSONL file store · planned: Cosmos DB")]
+    ROUTE["Model Routing 🗺️<br/>Azure OpenAI"]
+    TOOLS["Tool Execution<br/>idempotency keys + sagas"]
+    OTEL["OpenTelemetry<br/>→ trace replay"]
+    CRASH["💥 process dies mid-task →<br/>a fresh process resumes from the log;<br/>the service credit is issued exactly once"]
 
-```bash
-dotnet test
+    CH --> SESSION
+    SESSION --> LOG
+    SESSION --> ROUTE
+    SESSION --> TOOLS
+    SESSION --> OTEL
+    CRASH -.-> LOG
+
+    style CRASH fill:#fff0f0,stroke:#cc0000
 ```
 
-This builds everything and runs the crash test for real: it spawns the runtime
-host, kills it with SIGKILL mid-tool-call, and verifies recovery.
+## What "durable" means here
+
+| Guarantee | Mechanism | Status |
+|---|---|---|
+| Crash mid-task → resume with correct state | Event-sourced sessions; every call's intent is durable *before* execution | ✅ tested in CI on every commit |
+| Deterministic replay of any run | Fold-over-log reconstruction; all nondeterminism recorded as events | ✅ tested in CI (reconstruction mode) · 🗺️ fork-based re-execution |
+| Side effects execute exactly-once or compensate | Deterministic idempotency keys + saga compensation | ✅ keys tested in CI · 🔨 unwind engine in progress (event model landed) |
+| Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | 🔨 event model landed; runtime support in progress |
+| Mid-session channel handoff | Session–channel decoupling | 🗺️ planned (sessions hold no channel state by design; no channels built yet) |
+
+## See it survive
+
+The first thing in CI — before any feature existed — is a test that kills the runtime for real:
+
+```csharp
+// tests/Aurelia.CrashTests/CrashRecoveryTests.cs (abridged)
+using (var victim = StartHost(sessionId, goal, storeDir, signalDir))
+{
+    await WaitUntilAsync(() => Directory.EnumerateFiles(signalDir, "*.started").Any());
+    victim.Kill(entireProcessTree: true);              // SIGKILL, mid-tool-call
+}
+
+var afterCrash = await store.ReadAsync(sessionId);
+Assert.Contains(afterCrash, e => e is ToolCallRequested);   // the intent is durable
+Assert.DoesNotContain(afterCrash, e => e is CallOutcome);   // the outcome is not
+
+using var survivor = StartHost(sessionId, goal, storeDir, signalDir);  // fresh process
+Assert.Equal(0, survivor.ExitCode);
+
+var success = Assert.Single(finalLog.OfType<ToolCallSucceeded>());     // exactly once
+Assert.Equal(request.IdempotencyKey, success.IdempotencyKey);
+
+var replayed = await new ReconstructionReplayEngine(store).ReplayAsync(sessionId);
+Assert.Equal(completed.FinalStateJson, replayed.FinalStateJson);       // replay == live
+```
+
+[The real test](tests/Aurelia.CrashTests/CrashRecoveryTests.cs) · [CI runs](https://github.com/parammadan/aurelia/actions/workflows/ci.yml)
+
+One honest caveat: the tool being killed today is a provisional, deliberately blockable stub standing in for a case-resolution agent's `issue_service_credit` step. The agent is in progress; the contract it must satisfy is already merciless, and it runs on every commit.
+
+## Quick start
+
+Prerequisite: [.NET SDK 10.0.3xx](https://dotnet.microsoft.com/download/dotnet/10.0).
+
+```bash
+git clone https://github.com/parammadan/aurelia && cd aurelia
+
+# Run the whole suite, including the SIGKILL crash-recovery contract (~5 s):
+dotnet test
+
+# Run a session, then replay it deterministically from its event log:
+dotnet run --project src/Aurelia.Runtime -- run    --session-id demo --goal "issue service credit for case 42" --store-dir /tmp/aurelia
+dotnet run --project src/Aurelia.Runtime -- replay --session-id demo --store-dir /tmp/aurelia
+```
+
+That is everything that works today: build, tests, the demo session, and replay. There is no hosted playground, no Teams bot, and no Cosmos DB deployment yet — see the roadmap.
+
+## Design decisions
+
+Every design decision lands as an ADR before the code that depends on it. The load-bearing ones:
+
+| ADR | Decision |
+|---|---|
+| [0002](docs/adr/0002-crash-recovery-harness-is-the-ci-contract.md) | The SIGKILL crash-recovery test is the CI contract, from the first commit |
+| [0004](docs/adr/0004-replay-is-reconstruction-first.md) | Replay is reconstruction (a pure fold); counterfactual re-execution is a separate, later concept |
+| [0005](docs/adr/0005-results-match-by-key-checked-against-position.md) | Recorded results match by deterministic key, asserted against log position |
+| [0006](docs/adr/0006-core-may-not-read-time-or-randomness.md) | Core code may not read the clock or randomness — enforced by a Roslyn analyzer |
+| [0007](docs/adr/0007-flat-log-with-turn-step-attributes.md) | One flat, totally-ordered event log per session; turn/step ordinals on every envelope |
+| [0008](docs/adr/0008-external-calls-are-two-phase-events.md) | Every external call is two events: intent before execution, then outcome |
+| [0010](docs/adr/0010-keys-identify-logical-calls-attempts-numbered.md) | Idempotency keys identify logical calls and survive retries — the exactly-once mechanism |
+| [0011](docs/adr/0011-approval-is-a-slow-external-call.md) | Human approval is just a very slow external call; "paused" is derived state |
+| [0015](docs/adr/0015-compensation-is-an-external-call.md) | Saga compensation is itself a two-phase call in the log |
+
+Full log, including superseded decisions, in [docs/adr](docs/adr/README.md). The one-line summary of the philosophy: **non-determinism in the core is a compile error (`AUR0006`), not a code-review comment.**
+
+## Relationship to the ecosystem
+
+- **Copilot Studio and low-code agent platforms** — complementary. They decide *what* an agent does; Aurelia makes *doing it* survivable. The integration path is MCP: Aurelia agents exposed as tools with an async task pattern. No authoring UI, no connector catalog — by design.
+- **Temporal / Durable Task Framework** — inspiration. Aurelia adapts durable execution to nondeterministic orchestration logic: recorded-event substitution instead of deterministic-code replay, and (planned) fork-based counterfactuals instead of divergent replays.
+- **LangGraph and agent frameworks** — a different layer. They help you write agents; Aurelia is the runtime that keeps them alive.
+
+## Roadmap
+
+Planned ≠ built. Nothing below exists yet.
+
+- 🗺️ Saga unwind engine + the case-resolution reference agent (Dataverse-style case lookup, service-credit issuance, Teams escalation)
+- 🗺️ Cosmos DB event store (partition per session) with Blob Storage for large payloads
+- 🗺️ Orchestration intelligence: model routing across Azure OpenAI deployments, latency budgets, multi-agent coordination, Semantic Kernel interop
+- 🗺️ Eval harness and the **Orchestration Reliability Benchmark** — failure-injection scoring of recovery rate and correctness-after-recovery, across frameworks
+- 🗺️ Hosted playground with a chaos button; trace replay viewer on Application Insights data
+- 🗺️ Teams bot (Azure Bot Service), browser voice, and the mid-session channel handoff
+- 🗺️ Copilot Studio integration via MCP
+
+## License & contributing
+
+License: TBD (the repository is private while that is settled). Design conversations happen in [docs/adr](docs/adr/README.md); the crash test is the bar every change must clear.
+
+Built by Param Madan — design notes in [docs/adr](docs/adr/README.md).
