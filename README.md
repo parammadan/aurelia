@@ -47,7 +47,7 @@ flowchart TD
 | Crash mid-task → resume with correct state | Event-sourced sessions; every call's intent is durable *before* execution | ✅ tested in CI on every commit |
 | Deterministic replay of any run | Fold-over-log reconstruction; all nondeterminism recorded as events | ✅ tested in CI (reconstruction mode) · 🗺️ fork-based re-execution |
 | Side effects execute exactly-once or compensate | Deterministic idempotency keys + saga compensation | ✅ tested in CI (kill mid-credit → exactly one ledger entry; failed notify → credit reversed) |
-| Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | 🔨 event model landed; runtime support in progress |
+| Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | ✅ tested in CI (pause, cross-process resume, denial unwind) · 🗺️ expiry |
 | Mid-session channel handoff | Session–channel decoupling | 🗺️ planned (sessions hold no channel state by design; no channels built yet) |
 
 ## See it survive
@@ -94,7 +94,13 @@ dotnet test
 dotnet run --project src/Aurelia.Runtime -- run    --session-id demo --goal "issue service credit for case 42" --store-dir /tmp/aurelia --agent case-resolution
 dotnet run --project src/Aurelia.Runtime -- replay --session-id demo --store-dir /tmp/aurelia
 
-# Run the eval suite (10 scenarios: happy paths, sagas, idempotent reruns, replay checks):
+# Case 7's $40 credit exceeds the manager-approval threshold — the run pauses,
+# a manager approves from a different process, and the same command resumes:
+dotnet run --project src/Aurelia.Runtime -- run     --session-id c7 --goal "credit for case 7" --store-dir /tmp/aurelia --agent case-resolution
+dotnet run --project src/Aurelia.Runtime -- approve --session-id c7 --store-dir /tmp/aurelia --key c7/0/1 --approver manager
+dotnet run --project src/Aurelia.Runtime -- run     --session-id c7 --goal "credit for case 7" --store-dir /tmp/aurelia --agent case-resolution
+
+# Run the eval suite (13 scenarios: happy paths, sagas, approvals, idempotent reruns, replay checks):
 dotnet run --project src/Aurelia.Runtime -- eval --suite evals/phase1.json
 ```
 

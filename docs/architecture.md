@@ -97,8 +97,9 @@ the key it reverses — ADR-0015), tools opt into reversibility via
 `ICompensatableTool` (ADR-0016), and a compensation that fails after retries
 parks the session in a terminal `SessionFailed` state that lists exactly which
 keys were and were not unwound (ADR-0017). Nothing is silent; nothing blocks
-forever. (The event model for all of this is merged and replay-validated; the
-runtime unwind engine is in progress.)
+forever. (All of this is implemented and CI-tested — the unwind engine, keyed
+retries, and approval pause/resume; approval *expiry* awaits the
+time-injection machinery.)
 
 Human-in-the-loop follows the same shape rather than getting its own
 machinery: an approval is just a very slow external call (ADR-0011). "Paused
