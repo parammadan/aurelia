@@ -39,7 +39,7 @@ public class CaseResolutionTests
 
         using var final = JsonDocument.Parse(result.FinalStateJson);
         Assert.Equal("failed", final.RootElement.GetProperty("status").GetString());
-        Assert.Equal("case-saga/0/1",
+        Assert.Equal("case-saga/0/2",
             final.RootElement.GetProperty("compensatedKeys")[0].GetString());
         Assert.Equal(0, final.RootElement.GetProperty("uncompensatedKeys").GetArrayLength());
 
@@ -75,7 +75,7 @@ public class CaseResolutionTests
         using var final = JsonDocument.Parse(result.FinalStateJson);
         Assert.Equal("failed", final.RootElement.GetProperty("status").GetString());
         Assert.Equal(0, final.RootElement.GetProperty("compensatedKeys").GetArrayLength());
-        Assert.Equal("case-stuck/0/1",
+        Assert.Equal("case-stuck/0/2",
             final.RootElement.GetProperty("uncompensatedKeys")[0].GetString());
 
         // The credit leaked (reversal never landed) — and the log says so.

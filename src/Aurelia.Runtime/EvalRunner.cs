@@ -19,6 +19,7 @@ public sealed record EvalScenario
     public string ExpectStatus { get; init; } = "completed";  // completed | failed
     public string[] ExpectFinalContains { get; init; } = [];
     public string[]? ExpectLedger { get; init; }              // null = skip check
+    public string? OnApproval { get; init; }                  // approve | deny | null
 }
 
 public sealed record EvalOutcome(string Name, bool Passed, double DurationMs, string? Failure);
@@ -72,6 +73,17 @@ public static class EvalRunner
 
             var result = await driver.RunToCompletionAsync("eval", s.Goal, ct);
 
+            // Resolve approval pauses when the scenario says how.
+            for (var guard = 0; guard < 3 && s.OnApproval is not null
+                && StatusOf(result.FinalStateJson) == "awaiting_approval"; guard++)
+            {
+                using var pausedState = JsonDocument.Parse(result.FinalStateJson);
+                var approvalKey = pausedState.RootElement.GetProperty("approvalKey").GetString()!;
+                await Approvals.ResolveAsync(store, "eval", approvalKey,
+                    approved: s.OnApproval == "approve", "eval-runner", ct);
+                result = await driver.RunToCompletionAsync("eval", s.Goal, ct);
+            }
+
             if (s.RunTwice)
             {
                 var again = await driver.RunToCompletionAsync("eval", s.Goal, ct);
@@ -114,8 +126,7 @@ public static class EvalRunner
         using var doc = JsonDocument.Parse(finalStateJson);
         return doc.RootElement.ValueKind == JsonValueKind.Object
             && doc.RootElement.TryGetProperty("status", out var status)
-            && status.GetString() == "failed"
-            ? "failed"
+            ? status.GetString() ?? "completed"
             : "completed";
     }
 

@@ -8,9 +8,15 @@
     "expectFinalContains": ["\"notified\":true", "\"caseId\":\"42\""],
     "expectLedger": ["credit"] },
 
-  { "name": "case-7-happy", "agent": "case-resolution", "goal": "credit for case 7",
+  { "name": "case-7-approved", "agent": "case-resolution", "goal": "credit for case 7",
+    "onApproval": "approve",
     "expectFinalContains": ["\"caseId\":\"7\""],
     "expectLedger": ["credit"] },
+
+  { "name": "case-7-denied", "agent": "case-resolution", "goal": "credit for case 7",
+    "onApproval": "deny", "expectStatus": "failed",
+    "expectFinalContains": ["denied by eval-runner"],
+    "expectLedger": [] },
 
   { "name": "case-goal-parsing", "agent": "case-resolution", "goal": "pls fix case 42 asap!!",
     "expectFinalContains": ["\"caseId\":\"42\""],
@@ -22,7 +28,7 @@
 
   { "name": "case-saga-notify-fails", "agent": "case-resolution", "goal": "credit for case 42",
     "failNotifications": true, "expectStatus": "failed",
-    "expectFinalContains": ["notification channel unavailable", "eval/0/1"],
+    "expectFinalContains": ["notification channel unavailable", "eval/0/2"],
     "expectLedger": ["credit", "reversal"] },
 
   { "name": "case-saga-rerun-idempotent", "agent": "case-resolution", "goal": "credit for case 42",
