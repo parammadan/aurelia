@@ -32,3 +32,12 @@ The parent's log stays small (one call pair per child); the full child story
 lives one deterministic id away, which the trace viewer can link to.
 Arbitrary-depth nesting works by induction. Cross-session queries ("all
 children of X") lean on the id convention until a real index exists.
+
+## Amendment (2026-08-02)
+
+Multi-turn conversations (ADR-0028) made step ordinals turn-scoped, so the
+step ordinal alone no longer identifies a call within a session. The child
+session id is therefore
+**`{parentSessionId}.{turnOrdinal}.{stepOrdinal}`** (e.g. `front.0.1`).
+The code has produced this format since conversations landed; this amendment
+brings the ADR text in line with it (flagged by the 2026-08-02 audit).

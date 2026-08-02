@@ -33,6 +33,15 @@ here?" at design time, not after. CI is slower than a unit-test-only suite
 (the harness runs real processes with real kills), which is accepted. The
 harness also becomes the seed of the Phase 3 chaos-injection framework.
 
+## Amendment (2026-08-02)
+
+The harness kills in two windows, not one: mid-tool-call as originally
+stated, and — via `AURELIA_SIGNAL_AFTER_EFFECT=1` — in the window *after*
+the tool's side effect commits but *before* the outcome event is durable.
+The second window is the harder contract (recovery must deduplicate, not
+re-execute) and is the basis of the kill-after-effect fault condition. The
+contract's shape is unchanged; its coverage is wider than the original text.
+
 ## Verified by
 
 `tests/Aurelia.CrashTests/CrashRecoveryTests.cs`, run in `.github/workflows/ci.yml`.
