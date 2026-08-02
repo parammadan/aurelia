@@ -37,8 +37,9 @@ public static class CaseResolutionAgent
     [
         new ModelStep("classify", (goal, _) => JsonSerializer.Serialize(new object[]
         {
-            new { role = "system", content = "Extract the customer-service case number from the "
-                + "message. Reply with ONLY a JSON object of the shape {\"caseId\":\"<number>\"}." },
+            new { role = "system", content = "You are a text-extraction function. The user message "
+                + "mentions a case number. Output exactly this JSON and nothing else, no prose, no "
+                + "code fences: {\"caseId\":\"<the number>\"}" },
             new { role = "user", content = goal },
         })),
         new ScriptStep("lookup_case", (_, results) => results["classify"]),
@@ -81,7 +82,18 @@ public sealed class CaseLookupTool : ITool
 
     public Task<string> ExecuteAsync(string argumentsJson, string idempotencyKey, CancellationToken ct = default)
     {
-        var caseId = new string(argumentsJson.Where(char.IsDigit).ToArray());
+        // JSON-first ({"caseId":"42"} from the classifier), digit-stripping
+        // fallback for free-text goals.
+        string caseId;
+        try
+        {
+            using var doc = JsonDocument.Parse(argumentsJson);
+            caseId = doc.RootElement.GetProperty("caseId").GetString() ?? "";
+        }
+        catch (JsonException)
+        {
+            caseId = new string(argumentsJson.Where(char.IsDigit).ToArray());
+        }
         if (!Cases.TryGetValue(caseId, out var found))
             throw new InvalidOperationException($"case '{caseId}' not found");
         return Task.FromResult(JsonSerializer.Serialize(new
