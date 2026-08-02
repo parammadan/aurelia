@@ -31,21 +31,32 @@ public static class CaseResolutionAgent
         new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
     ];
 
-    /// <summary>The triage variant: a durable model call classifies the
-    /// free-text request and extracts the case id before the tool steps.</summary>
-    public static readonly IReadOnlyList<AgentStep> TriageScript =
-    [
-        new ModelStep("classify", (goal, _) => JsonSerializer.Serialize(new object[]
+    private static readonly ModelStep ClassifyStep = new("classify",
+        (goal, _) => JsonSerializer.Serialize(new object[]
         {
             new { role = "system", content = "You are a text-extraction function. The user message "
                 + "mentions a case number. Output exactly this JSON and nothing else, no prose, no "
                 + "code fences: {\"caseId\":\"<the number>\"}" },
             new { role = "user", content = goal },
-        }), RouteClass: "classify"),
+        }), RouteClass: "classify");
+
+    /// <summary>The triage variant: a durable model call classifies the
+    /// free-text request and extracts the case id before the tool steps.</summary>
+    public static readonly IReadOnlyList<AgentStep> TriageScript =
+    [
+        ClassifyStep,
         new ScriptStep("lookup_case", (_, results) => results["classify"]),
         ManagerApproval,
         new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
         new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
+    ];
+
+    /// <summary>The multi-agent variant (ADR-0023): classify, then hand the
+    /// case to the case-resolution agent running as a child session.</summary>
+    public static readonly IReadOnlyList<AgentStep> ConciergeScript =
+    [
+        ClassifyStep,
+        new SubAgentStep("case-resolution", (_, results) => results["classify"]),
     ];
 
     public static ScriptedAgentDriver CreateDriver(
@@ -75,6 +86,23 @@ public static class CaseResolutionAgent
         });
         var tools = CreateTools(storeDir, failNotifications);
         return new(store, chaos is null ? tools : chaos.WrapTools(tools), TriageScript, policy);
+    }
+
+    public static ScriptedAgentDriver CreateConciergeDriver(
+        IEventStore store, string storeDir, IModelClient modelClient, bool failNotifications = false,
+        ChaosSource? chaos = null)
+    {
+        if (chaos is not null)
+            modelClient = chaos.WrapModel(modelClient);
+        return new(store, new Dictionary<string, ITool>(), ConciergeScript,
+            ModelRoutingPolicy.Single(modelClient, "concierge-v1"),
+            subAgents: (agent, childSessionId, childGoal, ct) => agent switch
+            {
+                // Same store: the child's log lives beside the parent's.
+                "case-resolution" => CreateDriver(store, storeDir, failNotifications, chaos)
+                    .RunToCompletionAsync(childSessionId, childGoal, ct),
+                _ => throw new InvalidOperationException($"unknown sub-agent '{agent}'"),
+            });
     }
 
     public static IReadOnlyDictionary<string, ITool> CreateTools(

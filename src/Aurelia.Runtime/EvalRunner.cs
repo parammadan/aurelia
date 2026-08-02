@@ -79,6 +79,8 @@ public static class EvalRunner
                 "case-triage" => CaseResolutionAgent.CreateTriageDriver(store, dir.FullName,
                     OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications,
                     OpenAICompatibleModelClient.FallbackFromEnvironment(), chaos),
+                "concierge" => CaseResolutionAgent.CreateConciergeDriver(store, dir.FullName,
+                    OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications, chaos),
                 "echo" => new ScriptedAgentDriver(store,
                     chaos is null ? echoTools : chaos.WrapTools(echoTools),
                     [new ScriptStep("echo", (goal, _) => goal)]),
