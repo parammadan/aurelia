@@ -32,3 +32,15 @@ nothing public. Param reviews everything in the morning.
   test project (tests/Aurelia.PlaygroundTests); the crash-test project stays
   reference-minimal. Suite: 59 tests green.
 - Next wake: neutral benchmark harness extraction.
+
+## Wake 4 (~05:10 ET)
+- Neutral harness extraction: benchmark restructured into framework-agnostic
+  core (Contracts/IFrameworkAdapter, HarnessRunner, Scoring — reads only the
+  harness-owned ledger + adapter claims) with AureliaAdapter and two
+  PlainAdapter flavors. docs/benchmark/harness.md documents the adapter
+  contract AND the honest gap: tools must move behind a harness-owned HTTP
+  boundary before third-party framework rounds.
+- Sanity n=5 through the new core matches prior behavior; kicked off N=100
+  confirmation run in the background.
+- Also this wake: Param chose bypass-permissions mode for the rest of the
+  night (his explicit selection), so remaining wakes run unattended.
