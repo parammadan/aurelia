@@ -20,12 +20,15 @@ public sealed record ScriptStep(
 /// <summary>
 /// One model step: builds a chat prompt from the goal and prior results. The
 /// call is durable two-phase — the intent records the full prompt, model id,
-/// parameters, and config version (ADR-0004); a completed call is substituted
-/// from the log on resume and never re-executed.
+/// parameters, config version, AND the routing decision (ADR-0004, ADR-0020);
+/// a completed call is substituted from the log on resume and never
+/// re-executed. <see cref="RouteClass"/> declares what kind of work this is
+/// (ADR-0021); the policy decides which backend serves it.
 /// </summary>
 public sealed record ModelStep(
     string Name,
-    Func<string, IReadOnlyDictionary<string, string>, string> BuildPromptJson) : AgentStep;
+    Func<string, IReadOnlyDictionary<string, string>, string> BuildPromptJson,
+    string RouteClass = "general") : AgentStep;
 
 /// <summary>
 /// A conditional human-approval gate (ADRs 0011-0013). The predicate is a
@@ -42,7 +45,7 @@ public sealed class ScriptedAgentDriver(
     IEventStore store,
     IReadOnlyDictionary<string, ITool> tools,
     IReadOnlyList<AgentStep> script,
-    IModelClient? modelClient = null,
+    ModelRoutingPolicy? modelPolicy = null,
     int maxAttempts = 2) : ISessionRuntime
 {
     public async Task<SessionResult> RunToCompletionAsync(string sessionId, string goal, CancellationToken ct = default)
@@ -143,7 +146,7 @@ public sealed class ScriptedAgentDriver(
                     if (resultJson is null)
                     {
                         var call = await ExecuteCallAsync(request, "execute_tool", request.ToolName,
-                            token => tools[request.ToolName].ExecuteAsync(request.ArgumentsJson, request.IdempotencyKey, token));
+                            (_, token) => tools[request.ToolName].ExecuteAsync(request.ArgumentsJson, request.IdempotencyKey, token));
                         if (call is null)
                             return await UnwindAsync(LastError(request.IdempotencyKey));
                         await Append(new ToolCallSucceeded
@@ -163,31 +166,47 @@ public sealed class ScriptedAgentDriver(
 
                 case ModelStep model:
                 {
-                    var client = modelClient
-                        ?? throw new InvalidOperationException($"script has model step '{model.Name}' but no model client is configured");
+                    var policy = modelPolicy
+                        ?? throw new InvalidOperationException($"script has model step '{model.Name}' but no routing policy is configured");
+                    var route = policy.Resolve(model.RouteClass);
                     var request = log.OfType<ModelCallRequested>()
                         .FirstOrDefault(r => r.StepOrdinal == stepIndex);
                     if (request is null)
                     {
+                        // ADR-0020: the intent is the routing-decision record.
                         request = new ModelCallRequested
                         {
                             SessionId = sessionId, Sequence = ++seq, TurnOrdinal = 0, StepOrdinal = stepIndex,
                             RecordedAt = DateTimeOffset.UtcNow,
-                            ModelId = client.ModelId,
+                            ModelId = route.Primary.ModelId,
                             PromptJson = model.BuildPromptJson(goal, results),
-                            ParametersJson = client.ParametersJson,
-                            ConfigVersion = client.ConfigVersion,
+                            ParametersJson = route.Primary.ParametersJson,
+                            ConfigVersion = route.Primary.ConfigVersion,
+                            RouteClass = model.RouteClass,
+                            RoutingPolicy = policy.Name,
+                            RoutingReason = DescribeRoute(model.RouteClass, route),
                         };
                         await Append(request);
                     }
 
                     // ADR-0004: a recorded outcome is substituted, never re-run.
-                    var outputJson = log.OfType<ModelCallSucceeded>()
+                    var recorded = log.OfType<ModelCallSucceeded>()
                         .FirstOrDefault(o => o.IdempotencyKey == request.IdempotencyKey)?.OutputJson;
-                    if (outputJson is null)
+                    if (recorded is null)
                     {
+                        // ADR-0022: attempt 1 = primary under its budget; later
+                        // attempts = the fallback (unbudgeted) when one exists.
+                        string? servedBy = null;
                         var call = await ExecuteCallAsync(request, "invoke_model", request.ModelId,
-                            token => client.CompleteAsync(request.PromptJson, token));
+                            (attempt, token) =>
+                            {
+                                var client = attempt == 1 ? route.Primary : route.Fallback ?? route.Primary;
+                                servedBy = client.ModelId;
+                                // The budget binds the primary on every attempt;
+                                // the fallback is the unbudgeted last resort.
+                                var budget = ReferenceEquals(client, route.Primary) ? route.LatencyBudget : null;
+                                return InvokeWithBudgetAsync(client, request.PromptJson, budget, token);
+                            });
                         if (call is null)
                             return await UnwindAsync(LastError(request.IdempotencyKey));
                         await Append(new ModelCallSucceeded
@@ -196,12 +215,13 @@ public sealed class ScriptedAgentDriver(
                             TurnOrdinal = request.TurnOrdinal, StepOrdinal = request.StepOrdinal,
                             RecordedAt = DateTimeOffset.UtcNow,
                             Attempt = call.Value.Attempt, OutputJson = call.Value.Result,
+                            ModelId = servedBy,
                         });
-                        outputJson = call.Value.Result;
+                        recorded = call.Value.Result;
                     }
 
-                    results[model.Name] = outputJson;
-                    lastResult = outputJson;
+                    results[model.Name] = recorded;
+                    lastResult = recorded;
                     break;
                 }
             }
@@ -256,7 +276,7 @@ public sealed class ScriptedAgentDriver(
                 {
                     var tool = (ICompensatableTool)tools[compensation.ToolName];
                     var call = await ExecuteCallAsync(compensation, "compensate_tool", compensation.ToolName,
-                        token => tool.CompensateAsync(
+                        (_, token) => tool.CompensateAsync(
                             compensation.ArgumentsJson, outcome.ResultJson,
                             compensation.IdempotencyKey, token));
                     if (call is not null)
@@ -291,9 +311,11 @@ public sealed class ScriptedAgentDriver(
         // Executes a call with keyed retries: each failed attempt appends a
         // non-terminal CallAttemptFailed; exhaustion appends a terminal
         // CallFailed and returns null. The caller appends the typed success.
+        // The action receives the 1-based attempt number so callers can vary
+        // the backend per attempt (ADR-0022 fallback).
         async Task<(string Result, int Attempt)?> ExecuteCallAsync(
             CallRequested intent, string spanName, string callee,
-            Func<CancellationToken, Task<string>> action)
+            Func<int, CancellationToken, Task<string>> action)
         {
             if (log.OfType<CallFailed>().Any(f => f.IdempotencyKey == intent.IdempotencyKey))
                 return null;
@@ -313,7 +335,7 @@ public sealed class ScriptedAgentDriver(
                 span?.SetTag("gen_ai.tool.call.id", intent.IdempotencyKey);
                 try
                 {
-                    var result = await action(ct);
+                    var result = await action(attempts + 1, ct);
                     return (result, attempts + 1);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -353,4 +375,32 @@ public sealed class ScriptedAgentDriver(
                 .OrderBy(f => f.Sequence).LastOrDefault()?.Error ?? "unknown error";
     }
 
+    private static string DescribeRoute(string routeClass, ModelRoute route)
+    {
+        var reason = $"class '{routeClass}' → {route.Primary.ModelId}";
+        if (route.LatencyBudget is { } budget)
+            reason += $", budget {budget.TotalMilliseconds:F0} ms";
+        if (route.Fallback is not null)
+            reason += $", fallback {route.Fallback.ModelId}";
+        return reason;
+    }
+
+    // A budget breach must read as an attempt failure, not a cancellation:
+    // a real caller cancellation still aborts the activation (ADR-0022).
+    private static async Task<string> InvokeWithBudgetAsync(
+        IModelClient client, string promptJson, TimeSpan? budget, CancellationToken ct)
+    {
+        if (budget is null)
+            return await client.CompleteAsync(promptJson, ct);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(budget.Value);
+        try
+        {
+            return await client.CompleteAsync(promptJson, cts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"latency budget exceeded ({budget.Value.TotalMilliseconds:F0} ms)");
+        }
+    }
 }

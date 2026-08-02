@@ -13,7 +13,7 @@ public sealed class FileEventStore(string directory, EventUpcasterRegistry? upca
     private static readonly TimeSpan LockRetryDelay = TimeSpan.FromMilliseconds(50);
     private const int LockRetries = 60; // ~3 s of contention tolerance
 
-    private readonly EventUpcasterRegistry _upcasters = upcasters ?? new EventUpcasterRegistry();
+    private readonly EventUpcasterRegistry _upcasters = upcasters ?? StandardUpcasters.Create();
 
     public async Task<long> AppendAsync(SessionEvent evt, CancellationToken ct = default)
     {
