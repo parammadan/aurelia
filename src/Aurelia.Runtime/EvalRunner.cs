@@ -28,26 +28,34 @@ public static class EvalRunner
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public static async Task<IReadOnlyList<EvalOutcome>> RunSuiteAsync(string suitePath, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<EvalOutcome>> RunSuiteAsync(
+        string suitePath, int repeat = 1, string? filter = null, CancellationToken ct = default)
     {
         var scenarios = JsonSerializer.Deserialize<List<EvalScenario>>(
             await File.ReadAllTextAsync(suitePath, ct), Json)
             ?? throw new InvalidOperationException($"empty suite: {suitePath}");
+        if (!string.IsNullOrEmpty(filter))
+            scenarios = [.. scenarios.Where(s => s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))];
+        if (scenarios.Count == 0)
+            throw new InvalidOperationException($"no scenarios match filter '{filter}'");
 
-        var outcomes = new List<EvalOutcome>(scenarios.Count);
-        foreach (var scenario in scenarios)
+        var outcomes = new List<EvalOutcome>(scenarios.Count * repeat);
+        for (var run = 0; run < repeat; run++)
         {
-            var clock = Stopwatch.StartNew();
-            string? failure;
-            try
+            foreach (var scenario in scenarios)
             {
-                failure = await RunScenarioAsync(scenario, ct);
+                var clock = Stopwatch.StartNew();
+                string? failure;
+                try
+                {
+                    failure = await RunScenarioAsync(scenario, ct);
+                }
+                catch (Exception ex)
+                {
+                    failure = $"{ex.GetType().Name}: {ex.Message}";
+                }
+                outcomes.Add(new EvalOutcome(scenario.Name, failure is null, clock.Elapsed.TotalMilliseconds, failure));
             }
-            catch (Exception ex)
-            {
-                failure = $"{ex.GetType().Name}: {ex.Message}";
-            }
-            outcomes.Add(new EvalOutcome(scenario.Name, failure is null, clock.Elapsed.TotalMilliseconds, failure));
         }
         return outcomes;
     }
@@ -64,7 +72,8 @@ public static class EvalRunner
                 // Uses the real endpoint when AURELIA_MODEL_ENDPOINT is set,
                 // the deterministic fake otherwise — same suite either way.
                 "case-triage" => CaseResolutionAgent.CreateTriageDriver(store, dir.FullName,
-                    OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications),
+                    OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications,
+                    OpenAICompatibleModelClient.FallbackFromEnvironment()),
                 "echo" => new ScriptedAgentDriver(store,
                     new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
                     [new ScriptStep("echo", (goal, _) => goal)]),

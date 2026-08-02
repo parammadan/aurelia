@@ -93,4 +93,19 @@ public sealed class OpenAICompatibleModelClient(string endpoint, string modelId,
             Environment.GetEnvironmentVariable("AURELIA_MODEL_ID") ?? "llama3.2",
             Environment.GetEnvironmentVariable("AURELIA_MODEL_API_KEY"));
     }
+
+    /// <summary>Optional fallback backend (ADR-0022): "fake" or a second
+    /// OpenAI-compatible endpoint via AURELIA_MODEL_FALLBACK_ENDPOINT/_ID/_KEY.</summary>
+    public static IModelClient? FallbackFromEnvironment()
+    {
+        if (Environment.GetEnvironmentVariable("AURELIA_MODEL_FALLBACK") == "fake")
+            return new FakeModelClient();
+        var endpoint = Environment.GetEnvironmentVariable("AURELIA_MODEL_FALLBACK_ENDPOINT");
+        if (string.IsNullOrEmpty(endpoint))
+            return null;
+        return new OpenAICompatibleModelClient(
+            endpoint,
+            Environment.GetEnvironmentVariable("AURELIA_MODEL_FALLBACK_ID") ?? "llama3.2",
+            Environment.GetEnvironmentVariable("AURELIA_MODEL_FALLBACK_KEY"));
+    }
 }

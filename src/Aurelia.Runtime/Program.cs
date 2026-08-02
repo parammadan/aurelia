@@ -12,10 +12,11 @@ using Orleans.Configuration;
 using System.Net;
 using System.Net.Sockets;
 
-string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null;
+string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null, filter = null;
 var agent = "echo";
 var approver = "cli";
 var deny = false;
+var repeat = 1;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -28,6 +29,8 @@ for (var i = 1; i < args.Length; i++)
         case "--key" when i + 1 < args.Length: approvalKey = args[++i]; break;
         case "--approver" when i + 1 < args.Length: approver = args[++i]; break;
         case "--deny": deny = true; break;
+        case "--repeat" when i + 1 < args.Length: _ = int.TryParse(args[++i], out repeat); break;
+        case "--filter" when i + 1 < args.Length: filter = args[++i]; break;
     }
 }
 
@@ -64,13 +67,29 @@ if (args.Length > 0 && args[0] == "eval")
         Console.Error.WriteLine("usage: Aurelia.Runtime eval --suite <path>");
         return 2;
     }
-    var outcomes = await EvalRunner.RunSuiteAsync(suite);
-    foreach (var o in outcomes)
-        Console.WriteLine($"{(o.Passed ? "PASS" : "FAIL"),-4} {o.Name,-28} {o.DurationMs,7:F0} ms  {o.Failure}");
+    var outcomes = await EvalRunner.RunSuiteAsync(suite, repeat, filter);
+    if (repeat <= 1)
+    {
+        foreach (var o in outcomes)
+            Console.WriteLine($"{(o.Passed ? "PASS" : "FAIL"),-4} {o.Name,-28} {o.DurationMs,7:F0} ms  {o.Failure}");
+    }
+    else
+    {
+        // Aggregate per scenario across repeats — the experiment view.
+        foreach (var group in outcomes.GroupBy(o => o.Name))
+        {
+            var times = group.Select(o => o.DurationMs).OrderBy(d => d).ToArray();
+            Console.WriteLine(
+                $"{group.Key,-28} {group.Count(o => o.Passed)}/{group.Count()} passed · " +
+                $"p50 {times[times.Length / 2],7:F0} ms · " +
+                $"p95 {times[Math.Min(times.Length - 1, (int)(times.Length * 0.95))],7:F0} ms · " +
+                $"min {times[0]:F0} · max {times[^1]:F0}");
+        }
+    }
     var durations = outcomes.Select(o => o.DurationMs).OrderBy(d => d).ToArray();
-    var p50 = durations[durations.Length / 2];
-    var p95 = durations[Math.Min(durations.Length - 1, (int)(durations.Length * 0.95))];
-    Console.WriteLine($"{outcomes.Count(o => o.Passed)}/{outcomes.Count} passed · p50 {p50:F0} ms · p95 {p95:F0} ms");
+    var p50All = durations[durations.Length / 2];
+    var p95All = durations[Math.Min(durations.Length - 1, (int)(durations.Length * 0.95))];
+    Console.WriteLine($"{outcomes.Count(o => o.Passed)}/{outcomes.Count} passed · p50 {p50All:F0} ms · p95 {p95All:F0} ms");
     return outcomes.All(o => o.Passed) ? 0 : 1;
 }
 
