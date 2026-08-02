@@ -185,13 +185,16 @@ public sealed record AgentCallSucceeded : CallOutcome
 
 /// <summary>v2 (ADR-0009/0020): added nullable ModelId — the model that
 /// ACTUALLY served, which under budget fallback (ADR-0022) can differ from
-/// the intent's routed choice. Null on upcast v1 history.</summary>
+/// the intent's routed choice. v3: added nullable token counts, making the
+/// log the cost record. Null on upcast history.</summary>
 public sealed record ModelCallSucceeded : CallOutcome
 {
-    public ModelCallSucceeded() { SchemaVersion = 2; }
+    public ModelCallSucceeded() { SchemaVersion = 3; }
 
     public required string OutputJson { get; init; }
     public string? ModelId { get; init; }
+    public int? InputTokens { get; init; }
+    public int? OutputTokens { get; init; }
 }
 
 public sealed record ApprovalResolved : CallOutcome

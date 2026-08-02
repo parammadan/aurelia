@@ -14,7 +14,9 @@ public static class StandardUpcasters
         .Register(nameof(ModelCallRequested), fromVersion: 1, BumpTo(2))
         .Register(nameof(ModelCallRequested), fromVersion: 0, BumpTo(2))
         .Register(nameof(ModelCallSucceeded), fromVersion: 1, BumpTo(2))
-        .Register(nameof(ModelCallSucceeded), fromVersion: 0, BumpTo(2));
+        .Register(nameof(ModelCallSucceeded), fromVersion: 0, BumpTo(2))
+        // v2 → v3: token counts added, nullable (chained after 0/1 → 2).
+        .Register(nameof(ModelCallSucceeded), fromVersion: 2, BumpTo(3));
 
     private static Func<JsonElement, JsonElement> BumpTo(int version) => payload =>
     {
