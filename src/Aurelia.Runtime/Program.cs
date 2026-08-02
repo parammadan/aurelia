@@ -12,7 +12,7 @@ using Orleans.Configuration;
 using System.Net;
 using System.Net.Sockets;
 
-string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null, filter = null, chaosSpec = null, queue = null, messageId = null;
+string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null, filter = null, chaosSpec = null, queue = null, messageId = null, message = null;
 var agent = "echo";
 var approver = "cli";
 var deny = false;
@@ -36,6 +36,7 @@ for (var i = 1; i < args.Length; i++)
         case "--queue" when i + 1 < args.Length: queue = args[++i]; break;
         case "--message-id" when i + 1 < args.Length: messageId = args[++i]; break;
         case "--max" when i + 1 < args.Length: _ = int.TryParse(args[++i], out maxMessages); break;
+        case "--message" when i + 1 < args.Length: message = args[++i]; break;
     }
 }
 
@@ -143,6 +144,26 @@ if (args.Length > 0 && args[0] is "send" or "listen")
     return 0;
 }
 
+// Conversations (ADR-0028): one turn per invocation, session open across
+// invocations, memory tiers per ADR-0030. No host needed.
+if (args.Length > 0 && args[0] == "turn")
+{
+    if (sessionId is null || message is null || storeDir is null)
+    {
+        Console.Error.WriteLine("usage: Aurelia.Runtime turn --session-id <id> --message <text> --store-dir <path>");
+        return 2;
+    }
+    var chatStore = EventStores.FromEnvironment(storeDir);
+    var chat = CaseResolutionAgent.CreateChatDriver(
+        chatStore, OpenAICompatibleModelClient.FromEnvironmentOrFake(),
+        new MemoryPolicy(HotTurns: 4, SummarizeEveryTurns: 4));
+    var turnResult = await chat.HandleTurnAsync(sessionId, message);
+    Console.WriteLine(turnResult.FinalStateJson.Contains("\"status\":\"awaiting")
+        ? $"AWAITING {turnResult.FinalStateJson}"
+        : $"AGENT_REPLY {turnResult.FinalStateJson}");
+    return 0;
+}
+
 // The plain (floor-baseline) agent needs no host, no store, no durability —
 // that is the point of it.
 if (args.Length > 0 && args[0] == "run" && agent == "plain")
@@ -203,7 +224,7 @@ using var host = new HostBuilder()
                 OpenAICompatibleModelClient.FromEnvironmentOrFake(), failNotify),
             _ => new ScriptedAgentDriver(eventStore,
                 new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
-                [new ScriptStep("echo", (sessionGoal, _) => sessionGoal)]),
+                [new ScriptStep("echo", ctx => ctx.UserMessage)]),
         });
 
         services.AddOpenTelemetry()
