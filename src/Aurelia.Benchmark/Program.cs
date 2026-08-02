@@ -10,6 +10,7 @@ var seed = 7;
 string? outPath = null;
 var toolsMode = "inproc";
 string? frameworksFilter = null;
+string? faultsFilter = null;
 for (var i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -19,6 +20,7 @@ for (var i = 0; i < args.Length; i++)
         case "--out" when i + 1 < args.Length: outPath = args[++i]; break;
         case "--tools" when i + 1 < args.Length: toolsMode = args[++i]; break;
         case "--frameworks" when i + 1 < args.Length: frameworksFilter = args[++i]; break;
+        case "--faults" when i + 1 < args.Length: faultsFilter = args[++i]; break;
     }
 }
 
@@ -90,7 +92,9 @@ if (frameworksFilter is not null)
     var wanted = frameworksFilter.Split(',', StringSplitOptions.TrimEntries);
     adapters = [.. adapters.Where(a => wanted.Any(w => a.Name.Contains(w, StringComparison.OrdinalIgnoreCase)))];
 }
-string[] faults = ["F0", "F1", "F6"];
+string[] faults = faultsFilter is null
+    ? ["F0", "F1", "F6"]
+    : faultsFilter.Split(',', StringSplitOptions.TrimEntries);
 
 var allRuns = new List<object>();
 Console.WriteLine($"pilot: N={n} per cell, seed={seed}, tools={toolsMode}, goal='credit for case 42'");

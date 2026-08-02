@@ -84,7 +84,9 @@ async def reverse_credit(args: dict) -> str:
 
 
 RETRY = RetryPolicy(maximum_attempts=2)
-OPTS = dict(start_to_close_timeout=timedelta(seconds=120), retry_policy=RETRY)
+# Tight StartToClose so an activity orphaned by a dead worker is re-dispatched
+# quickly on recovery — the standard Temporal configuration for fast tools.
+OPTS = dict(start_to_close_timeout=timedelta(seconds=10), retry_policy=RETRY)
 
 
 @workflow.defn
