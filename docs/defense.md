@@ -74,7 +74,15 @@ parks the session with explicit compensated/uncompensated lists — nothing
 silent, nothing infinite. ADRs 0015–0017; driver `UnwindAsync`;
 `CaseResolutionTests` (including flaky and exhausted compensation).
 
-**11. Queues** — message id *is* session id, so at-least-once delivery becomes
+**11. Conversations & memory** — one user message = one turn, keyed
+`session/turn/step` (ADR-0007's ordinals finally live); step builders get an
+explicit `TurnContext` so recorded prompts are exactly what builders wrote;
+memory tiers are hot-window + a `SummaryCheckpointed` event produced by a
+*recorded* summarize model call — compression that replays; open sessions
+replay to their last completed turn. ADRs 0028–0031; `HandleTurnAsync`,
+`TurnTests`.
+
+**11b. Queues** — message id *is* session id, so at-least-once delivery becomes
 exactly-once execution by construction; approval-parked sessions complete the
 message. ADR-0026; `ServiceBusIngestion`; live duplicate-delivery demo.
 
@@ -90,8 +98,6 @@ than left to the author's vigilance.*
 
 ## Weaknesses to own proactively (better volunteered than discovered)
 
-- **Multi-turn is unexercised** — everything writes `TurnOrdinal 0`; the
-  conversational loop and memory tiers are undesigned (the next real round).
 - **Model-swap-on-resume semantics** are undecided: recovery re-executes with
   the recorded prompt but the *currently configured* client.
 - **Retry policy is v1** (ADR-0027): deterministic backoff, no jitter, and
