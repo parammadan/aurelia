@@ -25,6 +25,9 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0017](0017-failed-compensation-parks-the-session.md) | Failed compensation parks the session as SessionFailed | Accepted |
 | [0018](0018-store-enforces-sequence-contiguity.md) | The store enforces sequence contiguity | Accepted |
 | [0019](0019-cosmos-event-store.md) | Cosmos DB event store: serverless, head-document concurrency, Entra-only | Accepted |
+| [0020](0020-routing-decision-recorded-on-intent.md) | The routing decision is recorded on the model intent | Accepted |
+| [0021](0021-route-classes-and-policy-map.md) | Routing is route classes resolved by a policy map | Accepted |
+| [0022](0022-latency-budget-breach-falls-back.md) | A latency budget breach is an attempt failure that falls back | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.
