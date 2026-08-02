@@ -1,6 +1,6 @@
 # 0034 — The eval suite is a CI gate
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

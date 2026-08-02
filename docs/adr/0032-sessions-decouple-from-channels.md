@@ -1,6 +1,6 @@
 # 0032 — Sessions decouple from channels
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

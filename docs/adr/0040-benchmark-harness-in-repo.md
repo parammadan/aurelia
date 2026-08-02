@@ -1,6 +1,6 @@
 # 0040 — The benchmark harness lives in-repo behind a neutral adapter contract
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

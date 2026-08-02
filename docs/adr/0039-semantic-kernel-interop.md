@@ -1,6 +1,6 @@
 # 0039 — Semantic Kernel interop goes both directions
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

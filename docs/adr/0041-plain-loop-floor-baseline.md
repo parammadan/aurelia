@@ -1,6 +1,6 @@
 # 0041 — The plain loop is the benchmark's floor baseline
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

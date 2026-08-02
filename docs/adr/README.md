@@ -37,6 +37,16 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0029](0029-steps-receive-turncontext.md) | Steps receive an explicit TurnContext | Accepted |
 | [0030](0030-memory-tiers-hot-window-and-summaries.md) | Memory tiers: hot window plus durable summary checkpoints | Accepted |
 | [0031](0031-replay-open-conversations-to-last-turn.md) | Replay reconstructs open conversations to the last completed turn | Accepted |
+| [0032](0032-sessions-decouple-from-channels.md) | Sessions decouple from channels | Accepted |
+| [0033](0033-token-usage-recorded-on-model-outcomes.md) | Token usage is recorded on model outcomes (schema v3) | Accepted |
+| [0034](0034-eval-suite-is-a-ci-gate.md) | The eval suite is a CI gate | Accepted |
+| [0035](0035-seeded-chaos-injection.md) | Chaos injection is seeded, parseable, and wraps at the perimeter | Accepted |
+| [0036](0036-mcp-server-surface.md) | The MCP server is a stateless channel over durable sessions | Accepted |
+| [0037](0037-telemetry-is-observability-only.md) | Telemetry is OpenTelemetry, and it is observability-only | Accepted |
+| [0038](0038-playground-and-trace-viewer.md) | The playground demos real processes; the trace viewer is a log projection | Accepted |
+| [0039](0039-semantic-kernel-interop.md) | Semantic Kernel interop goes both directions | Accepted |
+| [0040](0040-benchmark-harness-in-repo.md) | The benchmark harness lives in-repo behind a neutral adapter contract | Accepted |
+| [0041](0041-plain-loop-floor-baseline.md) | The plain loop is the benchmark's floor baseline | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.

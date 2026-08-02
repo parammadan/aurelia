@@ -1,6 +1,6 @@
 # 0037 — Telemetry is OpenTelemetry, and it is observability-only
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

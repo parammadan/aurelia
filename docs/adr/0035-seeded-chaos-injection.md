@@ -1,6 +1,6 @@
 # 0035 — Chaos injection is seeded, parseable, and wraps at the perimeter
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

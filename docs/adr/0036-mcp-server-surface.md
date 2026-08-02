@@ -1,6 +1,6 @@
 # 0036 — The MCP server is a stateless channel over durable sessions
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

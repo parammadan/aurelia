@@ -1,6 +1,6 @@
 # 0033 — Token usage is recorded on model outcomes (schema v3)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 

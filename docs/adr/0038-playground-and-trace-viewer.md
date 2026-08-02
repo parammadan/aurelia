@@ -1,6 +1,6 @@
 # 0038 — The playground demos real processes; the trace viewer is a log projection
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-02
 - **Author:** Param Madan
 
