@@ -20,8 +20,8 @@ Aurelia is what durable execution looks like when it is redesigned for agents.
 flowchart TD
     subgraph CH["Channels — adapters only; state never lives here"]
         WEB["Web"]
-        TEAMS["Teams"]
-        VOICE["Voice"]
+        TEAMS["Teams 🗺️"]
+        VOICE["Voice 🗺️"]
         CS["Copilot Studio (via MCP)"]
     end
     SESSION["Durable Agent Session<br/>(Orleans actor — holds no state)"]
@@ -46,10 +46,11 @@ flowchart TD
 | Guarantee | Mechanism | Status |
 |---|---|---|
 | Crash mid-task → resume with correct state | Event-sourced sessions; every call's intent is durable *before* execution | ✅ tested in CI on every commit |
-| Deterministic replay of any run | Fold-over-log reconstruction; all nondeterminism recorded as events | ✅ tested in CI (reconstruction mode) · 🗺️ fork-based re-execution |
+| Deterministic replay of any run | Fold-over-log reconstruction; all nondeterminism recorded as events | ✅ tested in CI: recorded-result *substitution* (reruns never re-invoke) and log-integrity *rejection* (corrupt logs fail loudly) · ⚠️ for terminal sessions, reconstruction is largely verified readback of recorded state — independent state recomputation is exercised only on open conversations ([audit §4](docs/review/audit-2026-08-02.md)) · 🗺️ fork-based re-execution |
 | Side effects execute exactly-once or compensate | Deterministic idempotency keys + saga compensation | ✅ tested in CI (kill mid-credit → exactly one ledger entry; failed notify → credit reversed) |
-| Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | ✅ tested in CI (pause, cross-process resume, denial unwind, expiry via *recorded* injected time) |
-| Mid-session channel handoff | Session–channel decoupling | 🗺️ planned (sessions hold no channel state by design; no channels built yet) |
+| Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | ✅ tested in CI (pause, resume from a fresh driver, denial unwind, expiry via *recorded* injected time) · cross-OS-process resume demonstrated via CLI/MCP, not yet automated |
+| Multi-turn conversations with durable memory | Turn-scoped events; hot window + summary checkpoints written by *recorded* model calls, so memory compression itself replays | ✅ tested in CI (turn resume across processes, window provenance, summarization, open-session replay) · ⚠️ young semantics: one failed turn terminally fails the conversation |
+| Mid-session channel handoff | Session–channel decoupling | 🗺️ planned (sessions hold no channel state by design; CLI/playground/MCP/queue surfaces exist, but no handoff between them is built) |
 
 ## See it survive
 
@@ -141,11 +142,11 @@ Full log, including superseded decisions, in [docs/adr](docs/adr/README.md). The
 
 ## Roadmap
 
-Planned ≠ built. Nothing below exists yet.
+Planned ≠ built: the 🗺️ item in each bullet does not exist yet. The parentheticals name the adjacent pieces that *do* ship in this repo today, so the line between the two stays sharp.
 
 - 🗺️ Blob Storage offload for large event payloads (the Cosmos DB event store exists: partition per session, head-document optimistic concurrency, Entra-only — set `AURELIA_COSMOS_ENDPOINT`; see [ADR-0019](docs/adr/0019-cosmos-event-store.md) and `infra/main.bicep`)
 - 🗺️ Semantic Kernel interop; vector/semantic memory recall. (Already built: multi-turn conversations with tiered memory — hot window + durable summary checkpoints whose compression itself replays [ADRs 0028–0031], `turn` CLI and `aurelia_send_turn` MCP tool; model routing with budgets and fallback [0020–0022]; multi-agent composition [0023–0025]; the Service Bus autonomous agent [0026]; declared retries [0027].)
-- 🗺️ The **Orchestration Reliability Benchmark**'s third-party rounds (LangGraph, Temporal, Agent Framework) with maintainer review, in a framework-neutral repo. (Already built and run at N=100 against the in-repo floor baselines: the [methodology](docs/benchmark/methodology.md), the adapter-based [harness](docs/benchmark/harness.md) with a harness-owned HTTP tool server for *physical* fault injection, and [experiments 001–004](docs/experiments/) with raw data — headline: the naive agent double-credited the customer in 100/100 kill-after-effect runs; Aurelia was exactly-once in 100/100.)
+- 🗺️ The **Orchestration Reliability Benchmark**'s third-party rounds (LangGraph, Temporal, Agent Framework) with maintainer review, in a framework-neutral repo. (Already built and run at N=100 against the in-repo floor baselines: the [methodology](docs/benchmark/methodology.md), the adapter-based [harness](docs/benchmark/harness.md) with a harness-owned HTTP tool server for *physical* fault injection, and [experiments](docs/experiments/) with raw data. **All results to date are withdrawn** pending a pre-registered rerun — see the [methodology header](docs/benchmark/methodology.md).)
 - 🗺️ *Hosted* playground and trace viewer (both exist locally today: `dotnet run --project src/Aurelia.Playground` → http://localhost:5199 — start a session, press 💥 to SIGKILL the real worker mid-task and watch a fresh process resume, then open its trace: a timeline of every call with exact prompts, outputs, routing decisions, and retries, straight from the event log — file or Cosmos)
 - 🗺️ Teams bot (Azure Bot Service), browser voice, and the mid-session channel handoff
 - 🗺️ Copilot Studio connector configuration for the existing MCP server (the server itself works today; see ecosystem section)
