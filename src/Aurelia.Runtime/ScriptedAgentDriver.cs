@@ -37,7 +37,8 @@ public sealed record ModelStep(
 /// </summary>
 public sealed record ApprovalGate(
     Func<TurnContext, string?> QuestionIfRequired,
-    string ApproverPolicy) : AgentStep;
+    string ApproverPolicy,
+    TimeSpan? Expiry = null) : AgentStep;
 
 /// <summary>
 /// A sub-agent step (ADR-0023): hands a goal to another agent, which runs as
@@ -201,19 +202,69 @@ public sealed class ScriptedAgentDriver(
                             RecordedAt = DateTimeOffset.UtcNow,
                             Question = question,
                             ApproverPolicy = gate.ApproverPolicy,
+                            ExpiresAt = gate.Expiry is { } expiry ? DateTimeOffset.UtcNow + expiry : null,
                         };
                         await a.AppendAsync(approval);
                     }
 
                     var resolution = a.Log.OfType<ApprovalResolved>()
                         .FirstOrDefault(o => o.IdempotencyKey == approval.IdempotencyKey);
-                    if (resolution is null)
+                    if (resolution is not null)
+                    {
+                        if (!resolution.Approved)
+                            return new ScriptRun(null,
+                                await UnwindAsync(a, $"approval denied by {resolution.ApproverId}"));
+                        break;
+                    }
+
+                    // Expiry (ADRs 0006/0013): a previously RECORDED injected
+                    // time decides first (replay determinism); otherwise the
+                    // runtime observes the clock, records it, then decides on
+                    // the recorded value.
+                    if (a.Log.OfType<ApprovalExpired>()
+                        .Any(o => o.IdempotencyKey == approval.IdempotencyKey))
                         return new ScriptRun(null,
-                            new SessionResult(a.SessionId, SessionStates.AwaitingApprovalJson(approval)));
-                    if (!resolution.Approved)
-                        return new ScriptRun(null,
-                            await UnwindAsync(a, $"approval denied by {resolution.ApproverId}"));
-                    break;
+                            await UnwindAsync(a, "approval expired"));
+                    if (approval.ExpiresAt is { } deadline)
+                    {
+                        var timeKey = a.Log.OfType<TimeRequested>()
+                            .Where(t => t.TurnOrdinal == turn)
+                            .OrderByDescending(t => t.Sequence).FirstOrDefault();
+                        var recordedNow = timeKey is null ? (DateTimeOffset?)null
+                            : a.Log.OfType<TimeProvided>()
+                                .FirstOrDefault(o => o.IdempotencyKey == timeKey.IdempotencyKey)?.Value;
+                        if (recordedNow is null && DateTimeOffset.UtcNow >= deadline)
+                        {
+                            var timeRequest = new TimeRequested
+                            {
+                                SessionId = a.SessionId, Sequence = a.NextSeq(), TurnOrdinal = turn,
+                                StepOrdinal = a.NextStepOrdinal(turn),
+                                RecordedAt = DateTimeOffset.UtcNow,
+                            };
+                            await a.AppendAsync(timeRequest);
+                            await a.AppendAsync(new TimeProvided
+                            {
+                                SessionId = a.SessionId, Sequence = a.NextSeq(),
+                                TurnOrdinal = timeRequest.TurnOrdinal, StepOrdinal = timeRequest.StepOrdinal,
+                                RecordedAt = DateTimeOffset.UtcNow, Attempt = 1,
+                                Value = DateTimeOffset.UtcNow,
+                            });
+                            recordedNow = a.Log.OfType<TimeProvided>().Last().Value;
+                        }
+                        if (recordedNow is { } now && now >= deadline)
+                        {
+                            await a.AppendAsync(new ApprovalExpired
+                            {
+                                SessionId = a.SessionId, Sequence = a.NextSeq(),
+                                TurnOrdinal = approval.TurnOrdinal, StepOrdinal = approval.StepOrdinal,
+                                RecordedAt = DateTimeOffset.UtcNow, Attempt = 1,
+                            });
+                            return new ScriptRun(null,
+                                await UnwindAsync(a, "approval expired"));
+                        }
+                    }
+                    return new ScriptRun(null,
+                        new SessionResult(a.SessionId, SessionStates.AwaitingApprovalJson(approval)));
                 }
 
                 case SubAgentStep sub:

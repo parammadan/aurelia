@@ -4,6 +4,7 @@
 
 [![ci](https://github.com/parammadan/aurelia/actions/workflows/ci.yml/badge.svg)](https://github.com/parammadan/aurelia/actions/workflows/ci.yml)
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## The Problem
 
@@ -47,7 +48,7 @@ flowchart TD
 | Crash mid-task → resume with correct state | Event-sourced sessions; every call's intent is durable *before* execution | ✅ tested in CI on every commit |
 | Deterministic replay of any run | Fold-over-log reconstruction; all nondeterminism recorded as events | ✅ tested in CI (reconstruction mode) · 🗺️ fork-based re-execution |
 | Side effects execute exactly-once or compensate | Deterministic idempotency keys + saga compensation | ✅ tested in CI (kill mid-credit → exactly one ledger entry; failed notify → credit reversed) |
-| Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | ✅ tested in CI (pause, cross-process resume, denial unwind) · 🗺️ expiry |
+| Pause for human approval indefinitely | Approval as a durable two-phase call; "paused" is derived, not stored | ✅ tested in CI (pause, cross-process resume, denial unwind, expiry via *recorded* injected time) |
 | Mid-session channel handoff | Session–channel decoupling | 🗺️ planned (sessions hold no channel state by design; no channels built yet) |
 
 ## See it survive
@@ -151,6 +152,6 @@ Planned ≠ built. Nothing below exists yet.
 
 ## License & contributing
 
-License: TBD (the repository is private while that is settled). Design conversations happen in [docs/adr](docs/adr/README.md); the crash test is the bar every change must clear.
+[MIT](LICENSE). Design conversations happen in [docs/adr](docs/adr/README.md); the crash test is the bar every change must clear. Issues and PRs welcome — especially corrections to the [benchmark](docs/benchmark/methodology.md) implementations from framework maintainers.
 
 Built by Param Madan — design notes in [docs/adr](docs/adr/README.md).

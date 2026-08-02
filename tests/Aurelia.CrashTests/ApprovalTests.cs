@@ -113,6 +113,49 @@ public class ApprovalTests
         }
     }
 
+    [Fact]
+    public async Task Expired_approval_unwinds_via_recorded_time()
+    {
+        var dir = Directory.CreateTempSubdirectory("aurelia-expiry-");
+        try
+        {
+            var store = new FileEventStore(dir.FullName);
+            IReadOnlyList<AgentStep> script =
+            [
+                new ScriptStep("lookup_case", ctx => ctx.UserMessage),
+                new ApprovalGate(_ => "approve this?", "manager", Expiry: TimeSpan.FromMilliseconds(60)),
+                new ScriptStep("issue_service_credit", ctx => ctx.Results["lookup_case"]),
+                new ScriptStep("notify_customer", ctx => ctx.Results["issue_service_credit"]),
+            ];
+            ScriptedAgentDriver Driver() => new(store,
+                CaseResolutionAgent.CreateInProcessTools(dir.FullName), script);
+
+            var paused = await Driver().RunToCompletionAsync("exp", "credit for case 42");
+            Assert.Contains("awaiting_approval", paused.FinalStateJson);
+
+            await Task.Delay(150); // let the deadline pass
+            var done = await Driver().RunToCompletionAsync("exp", "credit for case 42");
+
+            using var final = JsonDocument.Parse(done.FinalStateJson);
+            Assert.Equal("failed", final.RootElement.GetProperty("status").GetString());
+            Assert.Contains("expired", final.RootElement.GetProperty("reason").GetString());
+
+            // ADR-0006/0013: the decision rode a RECORDED injected time.
+            var log = await store.ReadAsync("exp");
+            Assert.Single(log.OfType<TimeRequested>());
+            Assert.Single(log.OfType<TimeProvided>());
+            Assert.Single(log.OfType<ApprovalExpired>());
+            Assert.False(File.Exists(Path.Combine(dir.FullName, "ledger.jsonl"))); // gate sat before the effect
+
+            var replayed = await new ReconstructionReplayEngine(store).ReplayAsync("exp");
+            Assert.Equal(done.FinalStateJson, replayed.FinalStateJson);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     private static string[] LedgerTypes(DirectoryInfo dir)
     {
         var ledger = Path.Combine(dir.FullName, "ledger.jsonl");
