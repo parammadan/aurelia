@@ -13,7 +13,7 @@ namespace Aurelia.Runtime;
 
 public sealed class CosmosEventStore(Container container, EventUpcasterRegistry? upcasters = null) : IEventStore
 {
-    private readonly EventUpcasterRegistry _upcasters = upcasters ?? new EventUpcasterRegistry();
+    private readonly EventUpcasterRegistry _upcasters = upcasters ?? StandardUpcasters.Create();
 
     public async Task<long> AppendAsync(SessionEvent evt, CancellationToken ct = default)
     {
