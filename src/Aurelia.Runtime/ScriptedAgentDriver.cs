@@ -54,12 +54,24 @@ public sealed record SubAgentStep(
 public delegate Task<SessionResult> SubAgentRunner(
     string agentName, string childSessionId, string goal, CancellationToken ct);
 
+/// <summary>Retry pacing for external calls (ADR-0027): deterministic
+/// exponential backoff, no jitter yet. Attempt failures are recorded events,
+/// so a crash mid-backoff resumes the schedule from the logged attempt count.</summary>
+public sealed record RetryPolicy(int MaxAttempts, TimeSpan InitialDelay, double BackoffFactor)
+{
+    public static readonly RetryPolicy Default = new(2, TimeSpan.FromMilliseconds(200), 2.0);
+
+    /// <summary>Delay before the given (2-based and up) attempt number.</summary>
+    public TimeSpan DelayBefore(int attempt) =>
+        TimeSpan.FromMilliseconds(InitialDelay.TotalMilliseconds * Math.Pow(BackoffFactor, attempt - 2));
+}
+
 public sealed class ScriptedAgentDriver(
     IEventStore store,
     IReadOnlyDictionary<string, ITool> tools,
     IReadOnlyList<AgentStep> script,
     ModelRoutingPolicy? modelPolicy = null,
-    int maxAttempts = 2,
+    RetryPolicy? retryPolicy = null,
     SubAgentRunner? subAgents = null) : ISessionRuntime
 {
     public async Task<SessionResult> RunToCompletionAsync(string sessionId, string goal, CancellationToken ct = default)
@@ -408,13 +420,18 @@ public sealed class ScriptedAgentDriver(
             if (log.OfType<CallFailed>().Any(f => f.IdempotencyKey == intent.IdempotencyKey))
                 return null;
 
+            var retry = retryPolicy ?? RetryPolicy.Default;
             var attempts = log.OfType<CallAttemptFailed>()
                 .Count(f => f.IdempotencyKey == intent.IdempotencyKey);
             // Demo pacing (playground): env-gated, perimeter-only slow-down so
             // a human can land the chaos button mid-call. Off unless set.
             var stepDelay = Environment.GetEnvironmentVariable("AURELIA_STEP_DELAY_MS");
-            while (attempts < maxAttempts)
+            while (attempts < retry.MaxAttempts)
             {
+                // ADR-0027: exponential backoff before every retry attempt —
+                // including resumed ones, since attempts come from the log.
+                if (attempts > 0)
+                    await Task.Delay(retry.DelayBefore(attempts + 1), ct);
                 if (int.TryParse(stepDelay, out var delayMs) && delayMs > 0)
                     await Task.Delay(delayMs, ct);
                 using var span = AureliaDiagnostics.Source.StartActivity(spanName);
