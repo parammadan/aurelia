@@ -25,7 +25,7 @@ flowchart TD
     end
     SESSION["Durable Agent Session<br/>(Orleans actor — holds no state)"]
     LOG[("Append-only Event Log<br/>JSONL file store (default) · Cosmos DB (serverless, Entra-only)")]
-    ROUTE["Model Routing 🗺️<br/>Azure OpenAI"]
+    ROUTE["Model Routing<br/>route classes · budgets · fallback"]
     TOOLS["Tool Execution<br/>idempotency keys + sagas"]
     OTEL["OpenTelemetry<br/>→ trace replay"]
     CRASH["💥 process dies mid-task →<br/>a fresh process resumes from the log;<br/>the service credit is issued exactly once"]
@@ -100,11 +100,18 @@ dotnet run --project src/Aurelia.Runtime -- run     --session-id c7 --goal "cred
 dotnet run --project src/Aurelia.Runtime -- approve --session-id c7 --store-dir /tmp/aurelia --key c7/0/1 --approver manager
 dotnet run --project src/Aurelia.Runtime -- run     --session-id c7 --goal "credit for case 7" --store-dir /tmp/aurelia --agent case-resolution
 
-# Run the eval suite (13 scenarios: happy paths, sagas, approvals, idempotent reruns, replay checks):
+# Hold a durable multi-turn conversation (each turn is a separate process):
+dotnet run --project src/Aurelia.Runtime -- turn --session-id talk --message "hi, case 42 is broken" --store-dir /tmp/aurelia
+dotnet run --project src/Aurelia.Runtime -- turn --session-id talk --message "any update?" --store-dir /tmp/aurelia
+
+# Run the eval suite (15 scenarios: happy paths, sagas, approvals, idempotent reruns, replay checks):
 dotnet run --project src/Aurelia.Runtime -- eval --suite evals/phase1.json
+
+# Local playground with the 💥 chaos button and per-session trace viewer:
+dotnet run --project src/Aurelia.Playground   # → http://localhost:5199
 ```
 
-That is everything that works today: build, tests, the demo session, and replay. There is no hosted playground, no Teams bot, and no Cosmos DB deployment yet — see the roadmap.
+Optional backends via environment: Cosmos DB event store (`AURELIA_COSMOS_ENDPOINT`), any OpenAI-compatible model (`AURELIA_MODEL_ENDPOINT` — Ollama, vLLM, Azure OpenAI), Application Insights traces, Azure Service Bus ingestion (`send`/`listen`). Nothing is *hosted* yet — no public playground, no Teams bot; see the roadmap.
 
 ## Design decisions
 
@@ -128,7 +135,8 @@ Full log, including superseded decisions, in [docs/adr](docs/adr/README.md). The
 
 - **Copilot Studio and low-code agent platforms** — complementary. They decide *what* an agent does; Aurelia makes *doing it* survivable. The integration path is MCP, and it exists: `src/Aurelia.Mcp` exposes sessions as MCP tools (start / inspect / approve / resume / replay), registered for this repo in `.mcp.json`. Because sessions are durable, the async pattern is free — a session can pause in one MCP server process and be approved and finished by another. No authoring UI, no connector catalog — by design.
 - **Temporal / Durable Task Framework** — inspiration. Aurelia adapts durable execution to nondeterministic orchestration logic: recorded-event substitution instead of deterministic-code replay, and (planned) fork-based counterfactuals instead of divergent replays.
-- **LangGraph and agent frameworks** — a different layer. They help you write agents; Aurelia is the runtime that keeps them alive.
+- **Semantic Kernel / Microsoft Agent Framework** — interop shipped both ways (`src/Aurelia.SemanticKernel`): any `KernelFunction` runs as a durable Aurelia tool with full two-phase recording, and any Aurelia agent is invocable as a `KernelFunction` whose session outlives the caller.
+- **LangGraph and agent frameworks** — a different layer. They help you write agents; Aurelia is the runtime that keeps them alive (and the [benchmark](docs/benchmark/methodology.md) now measures both LangGraph and Temporal under the same faults — see [experiment 005](docs/experiments/005-cross-framework-n100.md)).
 
 ## Roadmap
 

@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\Aurelia.Playground\Aurelia.Playground.csproj" />
     <ProjectReference Include="..\..\src\Aurelia.Runtime\Aurelia.Runtime.csproj" />
     <ProjectReference Include="..\..\src\Aurelia.Core\Aurelia.Core.csproj" />
+    <ProjectReference Include="..\..\src\Aurelia.SemanticKernel\Aurelia.SemanticKernel.csproj" />
   </ItemGroup>
 
 </Project>
