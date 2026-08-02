@@ -28,12 +28,12 @@ public class MultiAgentTests
             // Parent log: one model call pair + one agent call pair.
             var parentLog = await store.ReadAsync("front");
             var agentCall = Assert.Single(parentLog.OfType<AgentCallRequested>());
-            Assert.Equal("front.1", agentCall.ChildSessionId);
+            Assert.Equal("front.0.1", agentCall.ChildSessionId);
             var agentDone = Assert.Single(parentLog.OfType<AgentCallSucceeded>());
             Assert.Equal(agentCall.IdempotencyKey, agentDone.IdempotencyKey);
 
             // Child log: a complete case-resolution session of its own.
-            var childLog = await store.ReadAsync("front.1");
+            var childLog = await store.ReadAsync("front.0.1");
             Assert.Single(childLog.OfType<SessionStarted>());
             Assert.Single(childLog.OfType<SessionCompleted>());
             Assert.Contains(childLog.OfType<ToolCallRequested>(), r => r.ToolName == "issue_service_credit");
@@ -47,7 +47,7 @@ public class MultiAgentTests
             var countsBefore = (parentLog.Count, childLog.Count);
             await driver.RunToCompletionAsync("front", "hello, please credit case 42");
             Assert.Equal(countsBefore,
-                ((await store.ReadAsync("front")).Count, (await store.ReadAsync("front.1")).Count));
+                ((await store.ReadAsync("front")).Count, (await store.ReadAsync("front.0.1")).Count));
         }
         finally
         {
@@ -75,7 +75,7 @@ public class MultiAgentTests
             Assert.Equal(0, final.RootElement.GetProperty("uncompensatedKeys").GetArrayLength());
             Assert.Equal(["credit", "reversal"], LedgerTypes(dir));
 
-            var childLog = await store.ReadAsync("front.1");
+            var childLog = await store.ReadAsync("front.0.1");
             Assert.Single(childLog.OfType<SessionFailed>());
             var parentLog = await store.ReadAsync("front");
             Assert.Single(parentLog.OfType<CallFailed>());
@@ -100,7 +100,7 @@ public class MultiAgentTests
             var paused = await driver.RunToCompletionAsync("front", "credit case 7");
             using var pausedState = JsonDocument.Parse(paused.FinalStateJson);
             Assert.Equal("awaiting_subagent", pausedState.RootElement.GetProperty("status").GetString());
-            Assert.Equal("front.1", pausedState.RootElement.GetProperty("childSessionId").GetString());
+            Assert.Equal("front.0.1", pausedState.RootElement.GetProperty("childSessionId").GetString());
             var approvalKey = pausedState.RootElement.GetProperty("childState")
                 .GetProperty("approvalKey").GetString()!;
 
@@ -109,7 +109,7 @@ public class MultiAgentTests
             Assert.DoesNotContain(await store.ReadAsync("front.1"), e => e is SessionCompleted or SessionFailed);
 
             // Approve in the CHILD session; a fresh parent drive resumes both.
-            Assert.True(await Approvals.ResolveAsync(store, "front.1", approvalKey, true, "manager"));
+            Assert.True(await Approvals.ResolveAsync(store, "front.0.1", approvalKey, true, "manager"));
             var done = await CaseResolutionAgent
                 .CreateConciergeDriver(store, dir.FullName, new FakeModelClient())
                 .RunToCompletionAsync("front", "credit case 7");
