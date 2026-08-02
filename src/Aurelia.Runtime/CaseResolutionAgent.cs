@@ -168,14 +168,21 @@ public sealed class ServiceCreditTool(string ledgerPath) : ICompensatableTool
 
     public async Task<string> ExecuteAsync(string argumentsJson, string idempotencyKey, CancellationToken ct = default)
     {
-        // Crash-harness hook: lets the kill test land SIGKILL mid-issuance.
-        await BlockableSignals.SignalAndWaitAsync(idempotencyKey, ct);
+        // Crash-harness hook: lets a kill land mid-issuance. With
+        // AURELIA_SIGNAL_AFTER_EFFECT=1 the window is AFTER the ledger write —
+        // the effect happened, the caller never learned it. That's the case
+        // that separates exactly-once runtimes from everything else.
+        var afterEffect = Environment.GetEnvironmentVariable("AURELIA_SIGNAL_AFTER_EFFECT") == "1";
+        if (!afterEffect)
+            await BlockableSignals.SignalAndWaitAsync(idempotencyKey, ct);
 
         using var args = JsonDocument.Parse(argumentsJson);
         var caseId = args.RootElement.GetProperty("caseId").GetString()!;
         var amountUsd = args.RootElement.GetProperty("entitledCreditUsd").GetDecimal();
 
         AppendIfAbsent(new { key = idempotencyKey, type = "credit", caseId, amountUsd });
+        if (afterEffect)
+            await BlockableSignals.SignalAndWaitAsync(idempotencyKey, ct);
         return JsonSerializer.Serialize(new { creditId = idempotencyKey, caseId, amountUsd });
     }
 

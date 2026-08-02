@@ -114,6 +114,34 @@ if (args.Length > 0 && args[0] == "replay")
     return 0;
 }
 
+// The plain (floor-baseline) agent needs no host, no store, no durability —
+// that is the point of it.
+if (args.Length > 0 && args[0] == "run" && agent == "plain")
+{
+    if (goal is null || storeDir is null)
+    {
+        Console.Error.WriteLine("usage: Aurelia.Runtime run --agent plain --goal <text> --store-dir <path>");
+        return 2;
+    }
+    var plainChaosSpec = Environment.GetEnvironmentVariable("AURELIA_CHAOS");
+    var plainChaos = plainChaosSpec is null ? null : new ChaosSource(ChaosPolicy.Parse(plainChaosSpec));
+    var plainTools = CaseResolutionAgent.CreateTools(storeDir,
+        Environment.GetEnvironmentVariable("AURELIA_FAIL_NOTIFY") == "1");
+    if (plainChaos is not null)
+        plainTools = plainChaos.WrapTools(plainTools);
+    try
+    {
+        var plainFinal = await PlainLoopAgent.RunAsync(plainTools, goal);
+        Console.WriteLine($"FINAL_STATE {plainFinal}");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"ERROR {ex.Message}");
+        return 1;
+    }
+}
+
 if (args.Length == 0 || args[0] != "run" || sessionId is null || goal is null || storeDir is null)
 {
     Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path> [--agent echo|case-resolution|case-triage|concierge]");
@@ -133,9 +161,11 @@ using var host = new HostBuilder()
         var eventStore = EventStores.FromEnvironment(storeDir);
         services.AddSingleton(eventStore);
         var failNotify = Environment.GetEnvironmentVariable("AURELIA_FAIL_NOTIFY") == "1";
+        var chaosEnv = Environment.GetEnvironmentVariable("AURELIA_CHAOS");
+        var chaos = chaosEnv is null ? null : new ChaosSource(ChaosPolicy.Parse(chaosEnv));
         services.AddSingleton<ISessionRuntime>(agent switch
         {
-            "case-resolution" => CaseResolutionAgent.CreateDriver(eventStore, storeDir, failNotify),
+            "case-resolution" => CaseResolutionAgent.CreateDriver(eventStore, storeDir, failNotify, chaos),
             "case-triage" => CaseResolutionAgent.CreateTriageDriver(eventStore, storeDir,
                 OpenAICompatibleModelClient.FromEnvironmentOrFake(), failNotify,
                 fallback: Environment.GetEnvironmentVariable("AURELIA_MODEL_FALLBACK") == "fake"
