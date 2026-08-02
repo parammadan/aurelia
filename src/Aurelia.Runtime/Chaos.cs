@@ -91,14 +91,15 @@ public sealed class ChaosModelClient(IModelClient inner, ChaosSource chaos) : IM
     public string ParametersJson => inner.ParametersJson;
     public string ConfigVersion => inner.ConfigVersion;
 
-    public Task<string> CompleteAsync(string promptJson, CancellationToken ct = default)
+    public Task<ModelCompletion> CompleteAsync(string promptJson, CancellationToken ct = default)
     {
         if (chaos.Roll(chaos.Policy.ModelFailureRate))
             throw new InvalidOperationException("chaos: injected model failure");
         if (chaos.Roll(chaos.Policy.ModelMalformedRate))
             // Deliberately digit-free garbage: defeats both JSON parsing and
             // the digit-extraction fallback downstream.
-            return Task.FromResult("CHAOS §§ malformed model output — not json, no case number");
+            return Task.FromResult(new ModelCompletion(
+                "CHAOS §§ malformed model output — not json, no case number"));
         return inner.CompleteAsync(promptJson, ct);
     }
 }
