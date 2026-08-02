@@ -111,7 +111,9 @@ using var host = new HostBuilder()
         {
             "case-resolution" => CaseResolutionAgent.CreateDriver(eventStore, storeDir, failNotify),
             "case-triage" => CaseResolutionAgent.CreateTriageDriver(eventStore, storeDir,
-                OpenAICompatibleModelClient.FromEnvironmentOrFake(), failNotify),
+                OpenAICompatibleModelClient.FromEnvironmentOrFake(), failNotify,
+                fallback: Environment.GetEnvironmentVariable("AURELIA_MODEL_FALLBACK") == "fake"
+                    ? new FakeModelClient() : null),
             _ => new ScriptedAgentDriver(eventStore,
                 new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
                 [new ScriptStep("echo", (sessionGoal, _) => sessionGoal)]),

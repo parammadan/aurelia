@@ -41,7 +41,7 @@ public static class CaseResolutionAgent
                 + "mentions a case number. Output exactly this JSON and nothing else, no prose, no "
                 + "code fences: {\"caseId\":\"<the number>\"}" },
             new { role = "user", content = goal },
-        })),
+        }), RouteClass: "classify"),
         new ScriptStep("lookup_case", (_, results) => results["classify"]),
         ManagerApproval,
         new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
@@ -53,8 +53,20 @@ public static class CaseResolutionAgent
         new(store, CreateTools(storeDir, failNotifications), Script);
 
     public static ScriptedAgentDriver CreateTriageDriver(
-        IEventStore store, string storeDir, IModelClient modelClient, bool failNotifications = false) =>
-        new(store, CreateTools(storeDir, failNotifications), TriageScript, modelClient);
+        IEventStore store, string storeDir, IModelClient modelClient, bool failNotifications = false,
+        IModelClient? fallback = null)
+    {
+        // Latency budget for the classify route, if configured (ADR-0022).
+        TimeSpan? budget = int.TryParse(Environment.GetEnvironmentVariable("AURELIA_MODEL_BUDGET_MS"), out var ms) && ms > 0
+            ? TimeSpan.FromMilliseconds(ms)
+            : null;
+        var policy = new ModelRoutingPolicy("triage-v1", new Dictionary<string, ModelRoute>
+        {
+            ["classify"] = new(modelClient, fallback, budget),
+            ["general"] = new(modelClient),
+        });
+        return new(store, CreateTools(storeDir, failNotifications), TriageScript, policy);
+    }
 
     public static IReadOnlyDictionary<string, ITool> CreateTools(
         string storeDir, bool failNotifications = false)

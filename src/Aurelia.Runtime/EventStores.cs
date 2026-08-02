@@ -28,5 +28,6 @@ public static class EventStores
     // managed-identity probe hangs for minutes off-Azure. In Azure the CLI
     // credential fails fast and the chain falls through to managed identity.
     public static TokenCredential Credential() =>
-        new ChainedTokenCredential(new AzureCliCredential(), new ManagedIdentityCredential());
+        new ChainedTokenCredential(new AzureCliCredential(),
+            new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned));
 }
