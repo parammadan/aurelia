@@ -6,6 +6,7 @@
     <Project Path="src/Aurelia.Mcp/Aurelia.Mcp.csproj" />
     <Project Path="src/Aurelia.Playground/Aurelia.Playground.csproj" />
     <Project Path="src/Aurelia.Runtime/Aurelia.Runtime.csproj" />
+    <Project Path="src/Aurelia.ToolServer/Aurelia.ToolServer.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Aurelia.AnalyzerTests/Aurelia.AnalyzerTests.csproj" />

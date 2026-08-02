@@ -15,9 +15,11 @@ namespace Aurelia.Benchmark;
 public static class HarnessRunner
 {
     public static async Task<RunScore> RunOnceAsync(
-        IFrameworkAdapter adapter, string fault, int runSeed, CancellationToken ct = default)
+        IFrameworkAdapter adapter, string fault, int runSeed,
+        string? toolServerDll = null, CancellationToken ct = default)
     {
         var workDir = Directory.CreateTempSubdirectory("bench-");
+        Process? toolServer = null;
         try
         {
             var storeDir = Path.Combine(workDir.FullName, "store");
@@ -25,17 +27,32 @@ public static class HarnessRunner
             Directory.CreateDirectory(storeDir);
             Directory.CreateDirectory(signalDir);
 
-            var env = new Dictionary<string, string>();
+            // Fault configuration: on the worker when tools are in-process;
+            // on the SERVER when the physical tool boundary is in play — the
+            // worker then sees only a misbehaving HTTP dependency.
+            var faultEnv = new Dictionary<string, string>();
             if (fault == "F1")
-                env["AURELIA_CHAOS"] = $"seed={runSeed},tool_fail=0.3";
+                faultEnv["AURELIA_CHAOS"] = $"seed={runSeed},tool_fail=0.3";
             if (fault == "F6")
             {
-                env["AURELIA_SIGNAL_DIR"] = signalDir;
-                env["AURELIA_SIGNAL_AFTER_EFFECT"] = "1";
+                faultEnv["AURELIA_SIGNAL_DIR"] = signalDir;
+                faultEnv["AURELIA_SIGNAL_AFTER_EFFECT"] = "1";
                 File.WriteAllText(Path.Combine(signalDir, "block"), "");
             }
 
-            var task = new TaskAssignment("bench", "credit for case 42", storeDir, signalDir, env);
+            Dictionary<string, string> workerEnv;
+            if (toolServerDll is null)
+            {
+                workerEnv = faultEnv;
+            }
+            else
+            {
+                string url;
+                (toolServer, url) = await StartToolServerAsync(toolServerDll, storeDir, faultEnv, ct);
+                workerEnv = new Dictionary<string, string> { ["AURELIA_TOOLSERVER"] = url };
+            }
+
+            var task = new TaskAssignment("bench", "credit for case 42", storeDir, signalDir, workerEnv);
 
             int exit;
             string stdout;
@@ -71,8 +88,44 @@ public static class HarnessRunner
         }
         finally
         {
+            if (toolServer is { HasExited: false })
+                toolServer.Kill(entireProcessTree: true);
+            toolServer?.Dispose();
             workDir.Delete(recursive: true);
         }
+    }
+
+    private static async Task<(Process Server, string Url)> StartToolServerAsync(
+        string toolServerDll, string dataDir, IReadOnlyDictionary<string, string> faultEnv,
+        CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("dotnet")
+        {
+            ArgumentList = { toolServerDll, "--data-dir", dataDir },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var (k, v) in faultEnv)
+            psi.Environment[k] = v;
+
+        var process = Process.Start(psi)!;
+        var listening = new TaskCompletionSource<string>();
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null && e.Data.StartsWith("LISTENING "))
+                listening.TrySetResult(e.Data["LISTENING ".Length..].Trim());
+        };
+        process.ErrorDataReceived += (_, _) => { };
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        var done = await Task.WhenAny(listening.Task, Task.Delay(30_000, ct));
+        if (done != listening.Task)
+        {
+            process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException("tool server did not start within 30 s");
+        }
+        return (process, await listening.Task);
     }
 
     private static async Task<(int Exit, string Stdout)> RunToExitAsync(

@@ -74,3 +74,14 @@ nothing public. Param reviews everything in the morning.
 - Confirmation N=100 through the neutral harness: identical to the original
   in every cell. Provenance noted in experiment 004.
 - Morning summary written; loop stopping — charter complete.
+
+## Wake 6 (07:06 EDT) — clock note: earlier wake timestamps were estimates and ran hours fast; times are real from here
+- Built the harness-owned HTTP tool server (src/Aurelia.ToolServer): tools,
+  ledger, chaos injection, and the kill-window signal protocol all live at
+  the server — fault injection is now physical, not cooperative. Closes the
+  gap documented in docs/benchmark/harness.md.
+- HttpTool/HttpCompensatableTool clients; CreateTools switches on
+  AURELIA_TOOLSERVER; benchmark gained --tools http (server started per run,
+  faults configured on the server, workers get only the URL).
+- Verified n=5 through HTTP: aurelia F6 5/5 exactly-once via server-side
+  dedupe; plain-rerun I1×5. Suite still 59 green.

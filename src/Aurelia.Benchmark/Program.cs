@@ -8,6 +8,7 @@ using Aurelia.Benchmark;
 var n = 10;
 var seed = 7;
 string? outPath = null;
+var toolsMode = "inproc";
 for (var i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -15,6 +16,27 @@ for (var i = 0; i < args.Length; i++)
         case "--n" when i + 1 < args.Length: _ = int.TryParse(args[++i], out n); break;
         case "--seed" when i + 1 < args.Length: _ = int.TryParse(args[++i], out seed); break;
         case "--out" when i + 1 < args.Length: outPath = args[++i]; break;
+        case "--tools" when i + 1 < args.Length: toolsMode = args[++i]; break;
+    }
+}
+
+// --tools http: the physical dependency boundary — tools, ledger, and fault
+// injection live in the harness-owned tool server (see docs/benchmark/harness.md).
+string? toolServerDll = null;
+if (toolsMode == "http")
+{
+    for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+    {
+        if (!File.Exists(Path.Combine(dir.FullName, "Aurelia.slnx")))
+            continue;
+        toolServerDll = Path.Combine(dir.FullName,
+            "src", "Aurelia.ToolServer", "bin", "Release", "net10.0", "Aurelia.ToolServer.dll");
+        break;
+    }
+    if (toolServerDll is null || !File.Exists(toolServerDll))
+    {
+        Console.Error.WriteLine("tool server not built; run: dotnet build src/Aurelia.ToolServer -c Release");
+        return 2;
     }
 }
 
@@ -34,7 +56,7 @@ IFrameworkAdapter[] adapters =
 string[] faults = ["F0", "F1", "F6"];
 
 var allRuns = new List<object>();
-Console.WriteLine($"pilot: N={n} per cell, seed={seed}, goal='credit for case 42'");
+Console.WriteLine($"pilot: N={n} per cell, seed={seed}, tools={toolsMode}, goal='credit for case 42'");
 Console.WriteLine($"{"framework",-14} {"fault",-5} {"RR",-7} {"CAF",-7} violations");
 
 foreach (var fault in faults)
@@ -43,7 +65,7 @@ foreach (var fault in faults)
     {
         var cell = new List<RunScore>();
         for (var i = 0; i < n; i++)
-            cell.Add(await HarnessRunner.RunOnceAsync(adapter, fault, seed + i));
+            cell.Add(await HarnessRunner.RunOnceAsync(adapter, fault, seed + i, toolServerDll));
         var rr = cell.Count(r => r.Correct);
         var caf = cell.Count(r => r is { I1: true, I2: true, I3: true, I4: true });
         var violations = string.Join(" ",

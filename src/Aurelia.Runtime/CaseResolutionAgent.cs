@@ -108,6 +108,26 @@ public static class CaseResolutionAgent
     public static IReadOnlyDictionary<string, ITool> CreateTools(
         string storeDir, bool failNotifications = false)
     {
+        // When a harness-owned tool server is configured, tools are HTTP
+        // clients and all effects (ledger), faults, and kill windows live at
+        // the server — the physical dependency boundary.
+        var toolServer = Environment.GetEnvironmentVariable("AURELIA_TOOLSERVER");
+        if (!string.IsNullOrEmpty(toolServer))
+        {
+            var remote = new ITool[]
+            {
+                new HttpTool(toolServer, "lookup_case"),
+                new HttpCompensatableTool(toolServer, "issue_service_credit"),
+                new HttpTool(toolServer, "notify_customer"),
+            };
+            return remote.ToDictionary(t => t.Name);
+        }
+        return CreateInProcessTools(storeDir, failNotifications);
+    }
+
+    public static IReadOnlyDictionary<string, ITool> CreateInProcessTools(
+        string storeDir, bool failNotifications = false)
+    {
         var tools = new ITool[]
         {
             new CaseLookupTool(),
