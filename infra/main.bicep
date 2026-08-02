@@ -76,6 +76,42 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
+resource ai 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+  name: 'aurelia-ai-${uniqueString(resourceGroup().id)}'
+  location: location
+  kind: 'AIServices'
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    customSubDomainName: 'aurelia-ai-${uniqueString(resourceGroup().id)}'
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// Model deployment gated on subscription tier: the free-trial offer has zero
+// quota for current models (gpt-5.x) and 2024-era models are closed to new
+// deployments. Set deployModel=true after upgrading to pay-as-you-go.
+param deployModel bool = false
+
+resource classifierModel 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployModel) {
+  parent: ai
+  name: 'gpt-5.4-nano'
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 8
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-5.4-nano'
+      version: '2026-03-17'
+    }
+  }
+}
+
 output cosmosEndpoint string = cosmos.properties.documentEndpoint
 output cosmosAccountName string = cosmos.name
 output appInsightsConnectionString string = insights.properties.ConnectionString
+output openAiEndpoint string = ai.properties.endpoint
+output openAiAccountName string = ai.name
