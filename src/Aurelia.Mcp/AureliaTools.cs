@@ -40,6 +40,31 @@ public static class AureliaTools
         return Envelope(sessionId, result.FinalStateJson);
     }
 
+    [McpServerTool(Name = "aurelia_send_turn")]
+    [Description("Send one message to a durable CONVERSATION session (agent 'chat'): each call is "
+        + "one turn; the session keeps tiered memory (recent turns verbatim + a durable summary) "
+        + "and survives process death between turns. Omit sessionId to start a new conversation.")]
+    public static async Task<string> SendTurn(
+        [Description("The user message for this turn")] string message,
+        [Description("Existing conversation session id; omit to start a new one")] string? sessionId = null,
+        CancellationToken ct = default)
+    {
+        sessionId ??= $"chat-{DateTime.UtcNow:MMddHHmmss}-{Random.Shared.Next(1000, 9999)}";
+        var dir = SessionDir(sessionId);
+        Directory.CreateDirectory(dir);
+        var metaPath = Path.Combine(dir, "meta.json");
+        if (!File.Exists(metaPath))
+            await File.WriteAllTextAsync(metaPath,
+                JsonSerializer.Serialize(new { agent = "chat", sabotageNotify = false }), ct);
+
+        var driver = CaseResolutionAgent.CreateChatDriver(
+            EventStores.FromEnvironment(dir),
+            OpenAICompatibleModelClient.FromEnvironmentOrFake(),
+            new MemoryPolicy(HotTurns: 4, SummarizeEveryTurns: 4));
+        var result = await driver.HandleTurnAsync(sessionId, message, ct);
+        return Envelope(sessionId, result.FinalStateJson);
+    }
+
     [McpServerTool(Name = "aurelia_get_session")]
     [Description("Inspect a session: derived status, the full event timeline, and the side-effect "
         + "ledger. Everything comes from the durable event log.")]
@@ -130,7 +155,7 @@ public static class AureliaTools
                 OpenAICompatibleModelClient.FromEnvironmentOrFake(), sabotage),
             "echo" => new ScriptedAgentDriver(store,
                 new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
-                [new ScriptStep("echo", (g, _) => g)]),
+                [new ScriptStep("echo", ctx => ctx.UserMessage)]),
             _ => CaseResolutionAgent.CreateDriver(store, dir, sabotage),
         };
         return await driver.RunToCompletionAsync(sessionId, goal, ct);
