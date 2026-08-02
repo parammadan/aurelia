@@ -52,13 +52,7 @@ public static class AureliaTools
         if (events.Count == 0)
             return $"no session '{sessionId}'";
 
-        var status =
-            events.Any(e => e is SessionCompleted) ? "completed"
-            : events.Any(e => e is SessionFailed) ? "failed"
-            : events.OfType<ApprovalRequested>().Any(r =>
-                !events.OfType<ApprovalResolved>().Any(o => o.IdempotencyKey == r.IdempotencyKey))
-                ? "awaiting_approval"
-                : "in_flight";
+        var (status, _) = SessionStates.Derive(events);
 
         var ledgerPath = Path.Combine(SessionDir(sessionId), "ledger.jsonl");
         var ledger = File.Exists(ledgerPath) ? File.ReadAllLines(ledgerPath) : [];
