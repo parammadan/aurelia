@@ -126,7 +126,7 @@ Full log, including superseded decisions, in [docs/adr](docs/adr/README.md). The
 
 ## Relationship to the ecosystem
 
-- **Copilot Studio and low-code agent platforms** — complementary. They decide *what* an agent does; Aurelia makes *doing it* survivable. The integration path is MCP: Aurelia agents exposed as tools with an async task pattern. No authoring UI, no connector catalog — by design.
+- **Copilot Studio and low-code agent platforms** — complementary. They decide *what* an agent does; Aurelia makes *doing it* survivable. The integration path is MCP, and it exists: `src/Aurelia.Mcp` exposes sessions as MCP tools (start / inspect / approve / resume / replay), registered for this repo in `.mcp.json`. Because sessions are durable, the async pattern is free — a session can pause in one MCP server process and be approved and finished by another. No authoring UI, no connector catalog — by design.
 - **Temporal / Durable Task Framework** — inspiration. Aurelia adapts durable execution to nondeterministic orchestration logic: recorded-event substitution instead of deterministic-code replay, and (planned) fork-based counterfactuals instead of divergent replays.
 - **LangGraph and agent frameworks** — a different layer. They help you write agents; Aurelia is the runtime that keeps them alive.
 
@@ -139,7 +139,7 @@ Planned ≠ built. Nothing below exists yet.
 - 🗺️ The **Orchestration Reliability Benchmark** — failure-injection scoring of *recovery rate* and *correctness after failure*, across frameworks. The [methodology draft](docs/benchmark/methodology.md) is written (rules before results, deliberately); the harness seeds exist and run in CI today (SIGKILL crash tests, seeded chaos API, eval runner, two pilot experiments in `docs/experiments/`)
 - 🗺️ *Hosted* playground and trace viewer (both exist locally today: `dotnet run --project src/Aurelia.Playground` → http://localhost:5199 — start a session, press 💥 to SIGKILL the real worker mid-task and watch a fresh process resume, then open its trace: a timeline of every call with exact prompts, outputs, routing decisions, and retries, straight from the event log — file or Cosmos)
 - 🗺️ Teams bot (Azure Bot Service), browser voice, and the mid-session channel handoff
-- 🗺️ Copilot Studio integration via MCP
+- 🗺️ Copilot Studio connector configuration for the existing MCP server (the server itself works today; see ecosystem section)
 
 ## License & contributing
 

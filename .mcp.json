@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "aurelia": {
+      "command": "dotnet",
+      "args": ["run", "--project", "src/Aurelia.Mcp", "-c", "Release"]
+    }
+  }
+}
