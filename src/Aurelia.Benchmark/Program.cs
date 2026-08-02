@@ -9,6 +9,7 @@ var n = 10;
 var seed = 7;
 string? outPath = null;
 var toolsMode = "inproc";
+string? frameworksFilter = null;
 for (var i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -17,6 +18,7 @@ for (var i = 0; i < args.Length; i++)
         case "--seed" when i + 1 < args.Length: _ = int.TryParse(args[++i], out seed); break;
         case "--out" when i + 1 < args.Length: outPath = args[++i]; break;
         case "--tools" when i + 1 < args.Length: toolsMode = args[++i]; break;
+        case "--frameworks" when i + 1 < args.Length: frameworksFilter = args[++i]; break;
     }
 }
 
@@ -69,6 +71,24 @@ if (toolServerDll is not null)
         adapters.Add(new LangGraphAdapter(lgPython, lgScript, uuidKeys: false));
         adapters.Add(new LangGraphAdapter(lgPython, lgScript, uuidKeys: true));
     }
+
+    // Temporal joins when its venv exists AND a dev server is reachable
+    // (TEMPORAL_ADDRESS, e.g. from `temporal server start-dev --headless`).
+    var tpDir = Path.Combine(Path.GetDirectoryName(lgDir)!, "temporal");
+    var tpPython = Path.Combine(tpDir, ".venv", "bin", "python");
+    var tpScript = Path.Combine(tpDir, "case_resolution.py");
+    if (File.Exists(tpPython) && File.Exists(tpScript)
+        && Environment.GetEnvironmentVariable("TEMPORAL_ADDRESS") is not null)
+    {
+        adapters.Add(new TemporalAdapter(tpPython, tpScript, uuidKeys: false));
+        adapters.Add(new TemporalAdapter(tpPython, tpScript, uuidKeys: true));
+    }
+}
+
+if (frameworksFilter is not null)
+{
+    var wanted = frameworksFilter.Split(',', StringSplitOptions.TrimEntries);
+    adapters = [.. adapters.Where(a => wanted.Any(w => a.Name.Contains(w, StringComparison.OrdinalIgnoreCase)))];
 }
 string[] faults = ["F0", "F1", "F6"];
 
