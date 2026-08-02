@@ -89,14 +89,14 @@ resource ai 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
 }
 
-// Model deployment gated on subscription tier: the free-trial offer has zero
-// quota for current models (gpt-5.x) and 2024-era models are closed to new
-// deployments. Set deployModel=true after upgrading to pay-as-you-go.
-param deployModel bool = false
+// gpt-4.1-mini: the newest model this subscription has default quota for
+// (gpt-5.x needs a quota request). Set deployModel=false on subscriptions
+// without OpenAI quota.
+param deployModel bool = true
 
 resource classifierModel 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployModel) {
   parent: ai
-  name: 'gpt-5.4-nano'
+  name: 'gpt-4.1-mini'
   sku: {
     name: 'GlobalStandard'
     capacity: 8
@@ -104,8 +104,8 @@ resource classifierModel 'Microsoft.CognitiveServices/accounts/deployments@2024-
   properties: {
     model: {
       format: 'OpenAI'
-      name: 'gpt-5.4-nano'
-      version: '2026-03-17'
+      name: 'gpt-4.1-mini'
+      version: '2025-04-14'
     }
   }
 }
