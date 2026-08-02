@@ -51,6 +51,18 @@ public sealed record AgentMessageSent : SessionEvent
     public required string Content { get; init; }
 }
 
+/// <summary>
+/// Warm memory tier (ADR-0030): a model-generated summary covering all turns
+/// ≤ <see cref="ThroughTurn"/>. Produced by a recorded 'summarize' model call,
+/// so memory compression itself replays; the hot window presents this in
+/// place of the turns it covers.
+/// </summary>
+public sealed record SummaryCheckpointed : SessionEvent
+{
+    public required string Summary { get; init; }
+    public required int ThroughTurn { get; init; }
+}
+
 public sealed record SessionCompleted : SessionEvent
 {
     public required string FinalStateJson { get; init; }

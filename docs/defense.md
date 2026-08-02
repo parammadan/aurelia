@@ -79,11 +79,14 @@ exactly-once execution by construction; approval-parked sessions complete the
 message. ADR-0026; `ServiceBusIngestion`; live duplicate-delivery demo.
 
 **12. "Where's the evidence culture?"** — eval suite as a CI gate (15
-scenarios, tokens summed *from the log*), seeded chaos API, three experiments
+scenarios, tokens summed *from the log*), seeded chaos API, five experiments
 with threats-to-validity sections, benchmark methodology published before any
-scoreboard, pilot table (experiment 003). The one-liner: *recovery rate and
-correctness-after-failure are different axes, and the second is where
-frameworks quietly differ.*
+scoreboard — and a seven-contestant N=100 cross-framework table (experiment
+005): LangGraph and Temporal both go 100/100 exactly-once with deterministic
+idempotency keys and 0/100 (double-charge, every run) with per-attempt keys.
+The one-liner: *checkpointing buys recovery; keys buy correctness — and
+Aurelia is the only contestant where the key discipline is structural rather
+than left to the author's vigilance.*
 
 ## Weaknesses to own proactively (better volunteered than discovered)
 

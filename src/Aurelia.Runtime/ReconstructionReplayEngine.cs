@@ -81,10 +81,20 @@ public sealed class ReconstructionReplayEngine(IEventStore store) : IReplayEngin
                 "both SessionCompleted and SessionFailed present");
         if (failed is not null)
             return new SessionResult(sessionId, SessionStates.FailedJson(failed));
-        if (completed is null)
-            throw new SessionNotCompletedException(sessionId);
+        if (completed is not null)
+            return new SessionResult(sessionId, completed.FinalStateJson);
 
-        return new SessionResult(sessionId, completed.FinalStateJson);
+        // ADR-0031: an open conversation reconstructs to its last completed
+        // turn — turns are deterministic units, so the cut is exact.
+        var lastTurn = log.OfType<AgentMessageSent>().OrderBy(e => e.Sequence).LastOrDefault();
+        if (lastTurn is not null)
+            return new SessionResult(sessionId, JsonSerializer.Serialize(new
+            {
+                status = "open",
+                asOfTurn = lastTurn.TurnOrdinal,
+                reply = lastTurn.Content,
+            }));
+        throw new SessionNotCompletedException(sessionId);
     }
 }
 

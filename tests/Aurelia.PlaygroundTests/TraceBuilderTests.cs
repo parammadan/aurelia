@@ -33,7 +33,7 @@ public class TraceBuilderTests
 
             var agent = calls[1];
             Assert.Equal("agent", agent.GetProperty("kind").GetString());
-            Assert.Equal("tb.1", agent.GetProperty("childSessionId").GetString());
+            Assert.Equal("tb.0.1", agent.GetProperty("childSessionId").GetString());
         }
         finally
         {

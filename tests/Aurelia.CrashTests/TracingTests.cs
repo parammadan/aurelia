@@ -25,7 +25,7 @@ public class TracingTests
             var driver = new ScriptedAgentDriver(
                 new FileEventStore(storeDir.FullName),
                 new Dictionary<string, Aurelia.Core.ITool> { ["echo"] = new BlockableEchoTool() },
-                [new ScriptStep("echo", (goal, _) => goal)]);
+                [new ScriptStep("echo", ctx => ctx.UserMessage)]);
             await driver.RunToCompletionAsync("trace-session", "hello");
             tracerProvider.ForceFlush();
 

@@ -21,7 +21,7 @@ public class RetryPolicyTests
             var policy = new RetryPolicy(MaxAttempts: 3, TimeSpan.FromMilliseconds(50), BackoffFactor: 2.0);
             var driver = new ScriptedAgentDriver(store,
                 new Dictionary<string, ITool> { ["flaky"] = tool },
-                [new ScriptStep("flaky", (goal, _) => goal)],
+                [new ScriptStep("flaky", ctx => ctx.UserMessage)],
                 retryPolicy: policy);
 
             var clock = Stopwatch.StartNew();
@@ -51,7 +51,7 @@ public class RetryPolicyTests
             var store = new FileEventStore(dir.FullName);
             var driver = new ScriptedAgentDriver(store,
                 new Dictionary<string, ITool> { ["flaky"] = new FailNTimesTool(failures: 99) },
-                [new ScriptStep("flaky", (goal, _) => goal)],
+                [new ScriptStep("flaky", ctx => ctx.UserMessage)],
                 retryPolicy: new RetryPolicy(4, TimeSpan.FromMilliseconds(1), 1.0));
 
             var result = await driver.RunToCompletionAsync("retry-max", "go");

@@ -17,7 +17,7 @@ public class ReplayTests
             var store = new FileEventStore(dir.FullName);
             var driver = new ScriptedAgentDriver(store,
                 new Dictionary<string, Aurelia.Core.ITool> { ["echo"] = new BlockableEchoTool() },
-                [new ScriptStep("echo", (goal, _) => goal)]);
+                [new ScriptStep("echo", ctx => ctx.UserMessage)]);
             var live = await driver.RunToCompletionAsync("replay-session", "check case 42");
 
             var engine = new ReconstructionReplayEngine(store);

@@ -13,9 +13,9 @@ public static class CaseResolutionAgent
     /// (ADR-0011); at or below it, the gate never triggers.</summary>
     public const decimal ApprovalThresholdUsd = 30m;
 
-    private static readonly ApprovalGate ManagerApproval = new((_, results) =>
+    private static readonly ApprovalGate ManagerApproval = new(ctx =>
     {
-        using var found = JsonDocument.Parse(results["lookup_case"]);
+        using var found = JsonDocument.Parse(ctx.Results["lookup_case"]);
         var amount = found.RootElement.GetProperty("entitledCreditUsd").GetDecimal();
         return amount > ApprovalThresholdUsd
             ? $"Approve service credit of ${amount} for case " +
@@ -25,19 +25,19 @@ public static class CaseResolutionAgent
 
     public static readonly IReadOnlyList<AgentStep> Script =
     [
-        new ScriptStep("lookup_case", (goal, _) => goal),
+        new ScriptStep("lookup_case", ctx => ctx.UserMessage),
         ManagerApproval,
-        new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
-        new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
+        new ScriptStep("issue_service_credit", ctx => ctx.Results["lookup_case"]),
+        new ScriptStep("notify_customer", ctx => ctx.Results["issue_service_credit"]),
     ];
 
     private static readonly ModelStep ClassifyStep = new("classify",
-        (goal, _) => JsonSerializer.Serialize(new object[]
+        ctx => JsonSerializer.Serialize(new object[]
         {
             new { role = "system", content = "You are a text-extraction function. The user message "
                 + "mentions a case number. Output exactly this JSON and nothing else, no prose, no "
                 + "code fences: {\"caseId\":\"<the number>\"}" },
-            new { role = "user", content = goal },
+            new { role = "user", content = ctx.UserMessage },
         }), RouteClass: "classify");
 
     /// <summary>The triage variant: a durable model call classifies the
@@ -45,10 +45,10 @@ public static class CaseResolutionAgent
     public static readonly IReadOnlyList<AgentStep> TriageScript =
     [
         ClassifyStep,
-        new ScriptStep("lookup_case", (_, results) => results["classify"]),
+        new ScriptStep("lookup_case", ctx => ctx.Results["classify"]),
         ManagerApproval,
-        new ScriptStep("issue_service_credit", (_, results) => results["lookup_case"]),
-        new ScriptStep("notify_customer", (_, results) => results["issue_service_credit"]),
+        new ScriptStep("issue_service_credit", ctx => ctx.Results["lookup_case"]),
+        new ScriptStep("notify_customer", ctx => ctx.Results["issue_service_credit"]),
     ];
 
     /// <summary>The multi-agent variant (ADR-0023): classify, then hand the
@@ -56,7 +56,7 @@ public static class CaseResolutionAgent
     public static readonly IReadOnlyList<AgentStep> ConciergeScript =
     [
         ClassifyStep,
-        new SubAgentStep("case-resolution", (_, results) => results["classify"]),
+        new SubAgentStep("case-resolution", ctx => ctx.Results["classify"]),
     ];
 
     public static ScriptedAgentDriver CreateDriver(
@@ -87,6 +87,34 @@ public static class CaseResolutionAgent
         var tools = CreateTools(storeDir, failNotifications);
         return new(store, chaos is null ? tools : chaos.WrapTools(tools), TriageScript, policy);
     }
+
+    /// <summary>The conversational reference agent (ADRs 0028-0030): one
+    /// model step whose prompt is built from the memory window — summary,
+    /// recent turns verbatim, then the current message.</summary>
+    public static readonly IReadOnlyList<AgentStep> ChatScript =
+    [
+        new ModelStep("respond", ctx =>
+        {
+            var messages = new List<object>
+            {
+                new { role = "system", content = "You are a concise, helpful customer-service assistant." },
+            };
+            if (ctx.Summary is not null)
+                messages.Add(new { role = "system", content = $"Conversation so far, summarized: {ctx.Summary}" });
+            foreach (var turn in ctx.Window)
+            {
+                messages.Add(new { role = "user", content = turn.UserMessage });
+                messages.Add(new { role = "assistant", content = turn.AgentMessage });
+            }
+            messages.Add(new { role = "user", content = ctx.UserMessage });
+            return JsonSerializer.Serialize(messages);
+        }, RouteClass: "chat"),
+    ];
+
+    public static ScriptedAgentDriver CreateChatDriver(
+        IEventStore store, IModelClient modelClient, MemoryPolicy? memory = null) =>
+        new(store, new Dictionary<string, ITool>(), ChatScript,
+            ModelRoutingPolicy.Single(modelClient, "chat-v1"), memory: memory);
 
     public static ScriptedAgentDriver CreateConciergeDriver(
         IEventStore store, string storeDir, IModelClient modelClient, bool failNotifications = false,

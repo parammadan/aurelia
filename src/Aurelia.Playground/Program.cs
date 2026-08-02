@@ -223,6 +223,9 @@ sealed class SessionHandle(
         var (kind, detail) = evt switch
         {
             SessionStarted e => ("lifecycle", $"session started · goal: {e.Goal}"),
+            UserMessageReceived e => ("lifecycle", $"turn {e.TurnOrdinal} · user: {Trim(e.Content)}"),
+            AgentMessageSent e => ("success", $"turn {e.TurnOrdinal} · agent: {Trim(e.Content)}"),
+            SummaryCheckpointed e => ("lifecycle", $"memory summarized through turn {e.ThroughTurn}"),
             SessionCompleted e => ("success", $"session completed · {Trim(e.FinalStateJson)}"),
             SessionFailed e => ("failure",
                 $"session FAILED · {e.Reason} · compensated: [{string.Join(", ", e.CompensatedKeys)}] · leaked: [{string.Join(", ", e.UncompensatedKeys)}]"),

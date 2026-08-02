@@ -105,7 +105,7 @@ public static class EvalRunner
                     OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications, chaos),
                 "echo" => new ScriptedAgentDriver(store,
                     chaos is null ? echoTools : chaos.WrapTools(echoTools),
-                    [new ScriptStep("echo", (goal, _) => goal)]),
+                    [new ScriptStep("echo", ctx => ctx.UserMessage)]),
                 _ => throw new InvalidOperationException($"unknown agent '{s.Agent}'"),
             };
 
