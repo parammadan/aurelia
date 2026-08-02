@@ -89,14 +89,15 @@ resource ai 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
 }
 
-// gpt-4.1-mini: the newest model this subscription has default quota for
-// (gpt-5.x needs a quota request). Set deployModel=false on subscriptions
-// without OpenAI quota.
+// model-router: the one current model this subscription has default quota
+// for (newer gpt-5.x models need a quota request; 2024/early-2025 models are
+// closed to new deployments). Set deployModel=false on subscriptions without
+// OpenAI quota.
 param deployModel bool = true
 
 resource classifierModel 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (deployModel) {
   parent: ai
-  name: 'gpt-4.1-mini'
+  name: 'model-router'
   sku: {
     name: 'GlobalStandard'
     capacity: 8
@@ -104,10 +105,25 @@ resource classifierModel 'Microsoft.CognitiveServices/accounts/deployments@2024-
   properties: {
     model: {
       format: 'OpenAI'
-      name: 'gpt-4.1-mini'
-      version: '2025-04-14'
+      name: 'model-router'
+      version: '2025-11-18'
     }
   }
+}
+
+resource serviceBus 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
+  name: 'aurelia-sb-${uniqueString(resourceGroup().id)}'
+  location: location
+  sku: {
+    name: 'Basic'
+    tier: 'Basic'
+  }
+}
+
+resource casesQueue 'Microsoft.ServiceBus/namespaces/queues@2024-01-01' = {
+  parent: serviceBus
+  name: 'cases'
+  properties: {}
 }
 
 output cosmosEndpoint string = cosmos.properties.documentEndpoint
