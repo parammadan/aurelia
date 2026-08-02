@@ -104,6 +104,7 @@
     <div class="btnrow">
       <button class="chaos" id="chaos">💥 Kill the worker</button>
       <button id="replay">Replay from log</button>
+      <a id="traceLink" target="_blank" style="align-self:center"></a>
     </div>
     <div id="replayOut" class="ledger"></div>
   </div>
@@ -142,6 +143,8 @@ $("start").onclick = async () => {
   });
   sessionId = res.sessionId;
   $("sid").textContent = sessionId;
+  $("traceLink").href = `/trace.html?session=${encodeURIComponent(sessionId)}`;
+  $("traceLink").textContent = "open trace ↗";
   $("session").classList.remove("hidden");
   $("timelinePanel").classList.remove("hidden");
   $("replayOut").textContent = "";

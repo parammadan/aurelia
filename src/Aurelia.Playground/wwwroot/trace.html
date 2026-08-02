@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurelia Trace</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --border: #2a2f3d; --text: #e6e8ee;
+    --muted: #9aa1b2; --tool: #4f8ef7; --model: #9d7cd8; --approval: #e3a008;
+    --compensation: #e07b39; --ok: #3fb96f; --bad: #e5534b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 19px; margin: 0 0 2px; }
+  h1 .sid { font-family: ui-monospace, Menlo, monospace; font-size: 16px; color: var(--muted); }
+  .meta { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px;
+          font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-left: 8px; }
+  .pill.completed { background: #16391f; color: #62d68a; }
+  .pill.failed { background: #45191c; color: #f08782; }
+  .pill.awaiting_approval { background: #4a3607; color: #f2c14e; }
+  .pill.in_flight { background: #1d3a5f; color: #7db4f5; }
+  .panel { background: var(--panel); border: 1px solid var(--border);
+           border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 12px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase;
+       letter-spacing: .06em; }
+  .lane { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; }
+  .lane:hover .label { color: #fff; }
+  .label { min-width: 220px; font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+  .label .kind { font-size: 10px; font-weight: 700; text-transform: uppercase; min-width: 84px; }
+  .kind.tool { color: var(--tool); } .kind.model { color: var(--model); }
+  .kind.approval { color: var(--approval); } .kind.compensation { color: var(--compensation); }
+  .kind.time, .kind.random, .kind.call { color: var(--muted); }
+  .track { flex: 1; height: 18px; background: #0d0f15; border-radius: 4px; position: relative; }
+  .bar { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; min-width: 4px; opacity: .9; }
+  .bar.succeeded { background: var(--ok); }
+  .bar.failed, .bar.denied { background: var(--bad); }
+  .bar.pending { background: repeating-linear-gradient(45deg, #e3a008, #e3a008 6px, #8a6605 6px, #8a6605 12px); }
+  .dur { min-width: 84px; text-align: right; color: var(--muted);
+         font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .detail { display: none; margin: 4px 0 14px 230px; }
+  .detail.open { display: block; }
+  .detail pre { background: #0d0f15; border: 1px solid var(--border); border-radius: 6px;
+                padding: 10px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;
+                word-break: break-word; margin: 6px 0; }
+  .detail .otitle { font-size: 11px; color: var(--muted); text-transform: uppercase;
+                    letter-spacing: .05em; margin-top: 8px; }
+  .raw td { padding: 3px 10px 3px 0; font-size: 12.5px; vertical-align: top; }
+  .raw .t { color: var(--muted); font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+  .attempts { color: var(--bad); font-size: 11px; }
+  a { color: var(--tool); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Trace <span class="sid" id="sid"></span> <span class="pill" id="status"></span></h1>
+  <p class="meta" id="meta"></p>
+
+  <div class="panel">
+    <h2>Timeline — every external call, from the event log (click a lane for the exact inputs/outputs)</h2>
+    <div id="lanes"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Raw event log</h2>
+    <table class="raw" id="raw"></table>
+  </div>
+</div>
+
+<script>
+const sessionId = new URLSearchParams(location.search).get("session");
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const pretty = obj => {
+  // Pretty-print, expanding embedded JSON strings (prompts, results) one level.
+  const clone = JSON.parse(JSON.stringify(obj));
+  for (const k of Object.keys(clone)) {
+    if (typeof clone[k] === "string" && (clone[k].startsWith("{") || clone[k].startsWith("["))) {
+      try { clone[k] = JSON.parse(clone[k]); } catch {}
+    }
+  }
+  return JSON.stringify(clone, null, 2);
+};
+
+async function load() {
+  const res = await fetch(`/api/trace/${encodeURIComponent(sessionId)}`);
+  if (!res.ok) { $("meta").textContent = `no session '${sessionId}' found`; return; }
+  const t = await res.json();
+
+  $("sid").textContent = t.sessionId;
+  $("status").textContent = t.status.replaceAll("_", " ");
+  $("status").className = "pill " + t.status;
+  $("meta").textContent =
+    `goal: ${t.goal ?? "—"} · ${t.calls.length} calls · ${(t.totalMs / 1000).toFixed(2)} s total · started ${new Date(t.startedAt).toLocaleString()}`;
+
+  $("lanes").innerHTML = t.calls.map((c, i) => {
+    const end = c.endMs ?? t.totalMs;
+    const left = (c.startMs / t.totalMs) * 100;
+    const width = Math.max(0.5, ((end - c.startMs) / t.totalMs) * 100);
+    const dur = c.endMs == null ? "…" : `${Math.round(c.endMs - c.startMs)} ms`;
+    const retries = c.attempts > 1 ? ` <span class="attempts">×${c.attempts} attempts</span>` : "";
+    return `
+      <div class="lane" onclick="document.getElementById('d${i}').classList.toggle('open')">
+        <div class="label"><span class="kind ${c.kind}">${c.kind}</span>
+          <span>${esc(c.name)}${retries}</span></div>
+        <div class="track"><div class="bar ${c.status}" style="left:${left}%;width:${width}%"></div></div>
+        <div class="dur">${dur}</div>
+      </div>
+      <div class="detail" id="d${i}">
+        <div class="otitle">intent · ${esc(c.intent.type)} · ${esc(c.key)}</div>
+        <pre>${esc(pretty(c.intent.data))}</pre>
+        ${c.outcomes.map(o => `
+          <div class="otitle">${esc(o.type)} · t+${Math.round(o.atMs)} ms</div>
+          <pre>${esc(pretty(o.data))}</pre>`).join("")}
+      </div>`;
+  }).join("");
+
+  $("raw").innerHTML = t.events.map(e =>
+    `<tr><td class="t">#${e.seq}</td><td class="t">t+${Math.round(e.atMs)} ms</td>` +
+    `<td>${esc(e.type)}</td></tr>`).join("");
+}
+load();
+</script>
+</body>
+</html>

@@ -80,6 +80,20 @@ app.MapPost("/api/sessions/{id}/approve", async (string id, ApproveRequest req) 
     return Results.Json(new { resolved });
 });
 
+// The trace viewer reads any session straight from its event log — playground
+// sessions, CLI sessions under the same data root, or Cosmos history when
+// AURELIA_COSMOS_ENDPOINT is set. Session-id validation prevents traversal.
+app.MapGet("/api/trace/{id}", async (string id) =>
+{
+    if (!SessionIds.IsValid(id))
+        return Results.BadRequest("invalid session id");
+    var store = EventStores.FromEnvironment(Path.Combine(dataRoot, id));
+    var events = await store.ReadAsync(id);
+    return events.Count == 0
+        ? Results.NotFound()
+        : Results.Json(Aurelia.Playground.TraceBuilder.Build(id, events));
+});
+
 app.MapPost("/api/sessions/{id}/replay", async (string id) =>
 {
     if (!sessions.TryGetValue(id, out var handle))
