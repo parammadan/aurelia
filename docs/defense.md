@@ -90,11 +90,11 @@ message. ADR-0026; `ServiceBusIngestion`; live duplicate-delivery demo.
 scenarios, tokens summed *from the log*), seeded chaos API, five experiments
 with threats-to-validity sections, benchmark methodology published before any
 scoreboard — and a seven-contestant N=100 cross-framework table (experiment
-005): LangGraph and Temporal both go 100/100 exactly-once with deterministic
-idempotency keys and 0/100 (double-charge, every run) with per-attempt keys.
-The one-liner: *checkpointing buys recovery; keys buy correctness — and
-Aurelia is the only contestant where the key discipline is structural rather
-than left to the author's vigilance.*
+005). **The 005 numbers are withdrawn (2026-08-02)** pending a pre-registered
+rerun — a Temporal config value changed mid-measurement — so cite the
+*methodology and harness design* as the evidence culture, not the table. The
+withdrawal itself is the strongest exhibit: the process caught and retracted
+its own compromised result.
 
 ## Weaknesses to own proactively (better volunteered than discovered)
 

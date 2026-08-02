@@ -1,5 +1,12 @@
 # The Orchestration Reliability Benchmark — methodology (v1 draft)
 
+> **⚠️ RESULTS WITHDRAWN (2026-08-02).** All published results
+> (experiments 003–005) are withdrawn: a Temporal adapter configuration
+> (activity StartToClose timeout) was changed mid-measurement, and no run
+> configuration was pre-registered before measuring. A rerun requires a
+> pre-registered configuration approved by the project owner first. The
+> methodology below stands; the numbers do not.
+>
 > Status: methodology draft, published before any cross-framework results
 > exist — deliberately. The rules must be fixed and criticizable before the
 > first scoreboard, or the scoreboard is marketing.

@@ -1,9 +1,10 @@
 # Checkpointing won't save you
 
-> **DRAFT** — for Param's rewrite before publishing anywhere. Numbers cite
-> experiments 004/005 (raw data in the repo); the LangGraph and Temporal
-> implementations are ours and owe their maintainers a review pass before
-> this goes public.
+> **DRAFT — DO NOT PUBLISH.** The benchmark results this post cites were
+> **withdrawn 2026-08-02** pending a pre-registered rerun (see
+> `docs/benchmark/methodology.md`). Every number below must be replaced with
+> rerun data before this goes anywhere. Also still pending: Param's rewrite,
+> and maintainer review of the LangGraph/Temporal implementations.
 
 Ask an agent-framework vendor what happens when a process dies mid-task and
 you'll hear the same word: *checkpointing*. State is persisted, execution

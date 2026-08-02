@@ -1,5 +1,12 @@
 # Experiment 005 — The cross-framework reliability table (N=100)
 
+> **⚠️ WITHDRAWN (2026-08-02).** These results are withdrawn and must not be
+> cited: the Temporal adapter's activity StartToClose timeout was changed
+> mid-measurement (120s → 30s → 10s), and the run configuration was not
+> pre-registered. Finding 5 is invalidated outright (see below). The raw data
+> stays for the audit trail. A rerun happens only under a pre-registered,
+> owner-approved configuration (methodology header).
+
 - **Date:** 2026-08-02
 - **Scope:** the benchmark's first cross-framework round: **seven
   contestants** × 3 fault conditions × N=100, all through the harness-owned
@@ -62,15 +69,17 @@ I3 = no queryable terminal state.*
 4. **Naive retry is worse than nothing** under partial failure: plain-rerun's
    resubmits minted 6 duplicate charges (I1) that plain-noretry never
    created.
-5. **A timeout is not a failure — and naive keys pay for the difference.**
-   temporal-uuidkeys double-credited in 7 F1 runs *with no kills involved*:
-   forensic history inspection (workflow `bench-bench-jX8nYS`, event 12)
-   shows the credit activity's first attempt hitting its StartToClose timeout
-   *after* the tool server had committed the ledger write; attempt 2 then
-   re-fired the call with a fresh key. The deterministic-keys variant hit the
-   same timeouts and deduped them invisibly. Tight activity timeouts trade
-   orphan-recovery speed for false-failure retries; idempotency keys are the
-   only protection on both sides of that trade.
+5. ~~**A timeout is not a failure — and naive keys pay for the difference.**~~
+   **INVALIDATED (2026-08-02): do not cite.** This finding was an artifact of
+   the measurement, not a property of Temporal: the 10s StartToClose timeout
+   that produced the attempt-1-timeout-after-commit condition was set
+   mid-measurement (120s → 30s → 10s, changed while correcting an unrelated
+   F6 scoring artifact), so the configuration that *created* the finding was
+   chosen by the party reporting it, after measurement had begun. The
+   forensic trail (workflow `bench-bench-jX8nYS`, event 12) is real, but a
+   finding manufactured by an un-pre-registered config change is not a
+   finding. If a pre-registered rerun reproduces the effect under a timeout
+   value fixed in advance, it can be re-stated then.
 6. F1 recovery-rate differences (89 vs 75 vs 70) trace to retry topology
    (where the 2-attempt budget sits relative to the failure), not to depth of
    durability — a tuning observation, not a verdict.
