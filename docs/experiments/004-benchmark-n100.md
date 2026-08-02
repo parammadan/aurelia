@@ -38,6 +38,15 @@
 4. **Aurelia's CAF is 300/300 across all conditions** — every one of its 25
    F1 non-recoveries was a clean, explicit, compensated terminal state.
 
+## Reproduction through the neutral harness
+
+After the framework-neutral harness extraction (adapter contract + neutral
+scoring), the full N=100 matrix was re-run through the refactored core:
+**every cell matched the original exactly** — same RR, same CAF, same
+violation counts. Raw data:
+[`data/004-n100-neutral-harness.json`](data/004-n100-neutral-harness.json).
+The refactor provably changed the architecture, not the measurements.
+
 ## Threats to validity
 
 Unchanged from experiment 003 except scale: the referee still employs a

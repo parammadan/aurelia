@@ -1,5 +1,30 @@
 # Night log — 2026-08-02 (autonomous overnight session)
 
+## ☀️ MORNING SUMMARY — read this first
+
+**All four charter items completed. Nothing merged — PR #7 is your review queue.**
+
+1. **Benchmark at N=100** (900 runs): aurelia RR tracks retry math within one
+   run of theory (75/100 vs 75.4%), CAF a perfect 300/300; plain-rerun
+   double-credited the customer in 100/100 kill runs; naive resubmit made F1
+   correctness WORSE than no-retry (15 duplicate credits). → experiment 004.
+2. **Neutral harness extracted**: IFrameworkAdapter contract + scoring that
+   reads only harness-owned ground truth; the N=100 matrix re-run through the
+   new core matched the original in every cell. The honest gap (tools must
+   move behind an HTTP boundary before third-party rounds) is documented in
+   docs/benchmark/harness.md.
+3. **Status derivation deduplicated** (SessionStates.Derive — one source for
+   playground, trace viewer, MCP).
+4. **Playground/TraceBuilder tests added** (own test project — see the
+   web-SDK-reference gotcha in Wake 3, worth remembering).
+
+Suite: 59 tests green. Charter honored: no merges, no Azure spend, no cloud
+models, nothing public. Your moves today: review + merge PR #7, then the
+still-yours three (disclosure, blog voice, defense.md reading).
+
+---
+
+
 Charter: branches + PRs only, no self-merges, no Azure spend, no cloud models,
 nothing public. Param reviews everything in the morning.
 
@@ -44,3 +69,8 @@ nothing public. Param reviews everything in the morning.
   confirmation run in the background.
 - Also this wake: Param chose bypass-permissions mode for the rest of the
   night (his explicit selection), so remaining wakes run unattended.
+
+## Wake 5 (~05:50 ET) — final
+- Confirmation N=100 through the neutral harness: identical to the original
+  in every cell. Provenance noted in experiment 004.
+- Morning summary written; loop stopping — charter complete.
