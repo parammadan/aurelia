@@ -33,6 +33,10 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0025](0025-explicit-handoff-only.md) | Parent and child share state by explicit handoff only | Accepted |
 | [0026](0026-queue-delivery-maps-to-session-identity.md) | Queue delivery maps to deterministic session identity | Accepted |
 | [0027](0027-retry-policy.md) | Retry policy: declared attempts with exponential backoff | Accepted |
+| [0028](0028-conversations-enter-via-handleturn.md) | Conversations enter via HandleTurnAsync, alongside single-shot | Accepted |
+| [0029](0029-steps-receive-turncontext.md) | Steps receive an explicit TurnContext | Accepted |
+| [0030](0030-memory-tiers-hot-window-and-summaries.md) | Memory tiers: hot window plus durable summary checkpoints | Accepted |
+| [0031](0031-replay-open-conversations-to-last-turn.md) | Replay reconstructs open conversations to the last completed turn | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.
