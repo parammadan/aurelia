@@ -137,7 +137,7 @@ Planned ≠ built. Nothing below exists yet.
 - 🗺️ Blob Storage offload for large event payloads (the Cosmos DB event store exists: partition per session, head-document optimistic concurrency, Entra-only — set `AURELIA_COSMOS_ENDPOINT`; see [ADR-0019](docs/adr/0019-cosmos-event-store.md) and `infra/main.bicep`)
 - 🗺️ Multi-agent coordination, context/memory tiers, Semantic Kernel interop. (Model *routing* exists today: route classes resolved by a named policy, per-route latency budgets with fallback, the decision recorded on the intent — [ADRs 0020–0022](docs/adr/README.md). Durable model calls talk to any OpenAI-compatible endpoint via `AURELIA_MODEL_ENDPOINT` — a local Ollama, vLLM on a GPU cluster, or Azure OpenAI.)
 - 🗺️ The **Orchestration Reliability Benchmark** — failure-injection scoring of recovery rate and correctness-after-recovery, across frameworks (a thin eval runner exists today: `evals/phase1.json`, run in CI)
-- 🗺️ Hosted playground with a chaos button; trace replay viewer on Application Insights data
+- 🗺️ *Hosted* playground and trace viewer (both exist locally today: `dotnet run --project src/Aurelia.Playground` → http://localhost:5199 — start a session, press 💥 to SIGKILL the real worker mid-task and watch a fresh process resume, then open its trace: a timeline of every call with exact prompts, outputs, routing decisions, and retries, straight from the event log — file or Cosmos)
 - 🗺️ Teams bot (Azure Bot Service), browser voice, and the mid-session channel handoff
 - 🗺️ Copilot Studio integration via MCP
 
