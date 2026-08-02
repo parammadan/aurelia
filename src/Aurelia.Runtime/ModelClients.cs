@@ -62,7 +62,12 @@ public sealed class OpenAICompatibleModelClient(string endpoint, string modelId,
         using var request = new HttpRequestMessage(HttpMethod.Post,
             $"{endpoint.TrimEnd('/')}/chat/completions");
         if (!string.IsNullOrEmpty(apiKey))
+        {
+            // Bearer for OpenAI/vLLM/Ollama; api-key for Azure OpenAI's v1
+            // surface. Sending both is harmless — servers read their own.
             request.Headers.Add("Authorization", $"Bearer {apiKey}");
+            request.Headers.Add("api-key", apiKey);
+        }
         request.Content = JsonContent.Create(new
         {
             model = modelId,
