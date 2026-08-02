@@ -6,11 +6,11 @@ repository today and is exercised by CI.
 
 ```mermaid
 flowchart TD
-    subgraph CH["Channel adapters 🗺️ — stateless, swappable"]
-        WEB["Web playground 🗺️"]
-        TEAMS["Teams bot · Azure Bot Service 🗺️"]
-        VOICE["Voice · Azure Communication Services 🗺️"]
-        MCPF["MCP façade → Copilot Studio 🗺️"]
+    subgraph CH["Channels & entry points — stateless, swappable"]
+        PLAY["Web playground — today (local)"]
+        MCPF["MCP server — today<br/>(→ Copilot Studio connector 🗺️)"]
+        SB["Azure Service Bus queue — today<br/>msg id = session id (ADR-0026)"]
+        TEAMS["Teams bot 🗺️ · Voice/ACS 🗺️"]
     end
 
     subgraph CORE["Durable core — today"]

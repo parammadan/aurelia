@@ -87,18 +87,19 @@ frameworks quietly differ.*
 
 ## Weaknesses to own proactively (better volunteered than discovered)
 
-- **Retry policy has no ADR** — `maxAttempts=2`, immediate, is a provisional
-  default; recovery rate is a direct function of it (experiment 002 says so
-  explicitly).
 - **Multi-turn is unexercised** — everything writes `TurnOrdinal 0`; the
   conversational loop and memory tiers are undesigned (the next real round).
 - **Model-swap-on-resume semantics** are undecided: recovery re-executes with
   the recorded prompt but the *currently configured* client.
-- **Status derivation is duplicated** in the playground's snapshot vs. the
-  runtime (display-only, but drift-prone); **ledger dedupe is O(n) per write**
-  (demo scale only).
-- **The benchmark pilot's referee employs a contestant** — neutral harness
-  extraction and N≥100 are still owed; the methodology says so out loud.
+- **Retry policy is v1** (ADR-0027): deterministic backoff, no jitter, and
+  all-exceptions-retryable — the retryable-vs-terminal error taxonomy on the
+  tool contract is deferred until a real tool demands it.
+- **Ledger dedupe is O(n) per write** (demo scale only); **approval expiry**
+  still awaits the time-injection machinery.
+- **The benchmark referee still lives in a contestant's repo** — the harness
+  is adapter-based with a physical HTTP tool boundary and N=100 is done, but
+  the neutral-repo extraction and third-party maintainer-reviewed rounds are
+  owed; the methodology says so out loud.
 - **Process honesty**: the core was AI-drafted under direction (ADR-0014
   supersedes 0003); the defense is the ADR trail plus review — which means
   the review has to actually happen.
