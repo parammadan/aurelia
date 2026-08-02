@@ -91,14 +91,22 @@ public sealed record ToolCallRequested : CallRequested
 /// <summary>
 /// Records the FULL inputs — exact prompt, model, parameters, config version —
 /// so that re-execution and counterfactual replay remain possible without a
-/// schema migration (ADR-0004).
+/// schema migration (ADR-0004). This intent is also the routing decision
+/// record (ADR-0020): the route class, deciding policy, and reason live here.
+/// v2 (ADR-0009): added nullable RouteClass / RoutingPolicy / RoutingReason;
+/// null on upcast v1 history.
 /// </summary>
 public sealed record ModelCallRequested : CallRequested
 {
+    public ModelCallRequested() { SchemaVersion = 2; }
+
     public required string ModelId { get; init; }
     public required string PromptJson { get; init; }
     public required string ParametersJson { get; init; }
     public required string ConfigVersion { get; init; }
+    public string? RouteClass { get; init; }
+    public string? RoutingPolicy { get; init; }
+    public string? RoutingReason { get; init; }
 }
 
 /// <summary>
@@ -153,9 +161,15 @@ public sealed record ToolCallSucceeded : CallOutcome
     public required string ResultJson { get; init; }
 }
 
+/// <summary>v2 (ADR-0009/0020): added nullable ModelId — the model that
+/// ACTUALLY served, which under budget fallback (ADR-0022) can differ from
+/// the intent's routed choice. Null on upcast v1 history.</summary>
 public sealed record ModelCallSucceeded : CallOutcome
 {
+    public ModelCallSucceeded() { SchemaVersion = 2; }
+
     public required string OutputJson { get; init; }
+    public string? ModelId { get; init; }
 }
 
 public sealed record ApprovalResolved : CallOutcome
