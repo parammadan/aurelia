@@ -134,6 +134,19 @@ public sealed record CompensationRequested : CallRequested
     public required string CompensatesKey { get; init; }
 }
 
+/// <summary>
+/// A sub-agent invocation (ADR-0023): the child runs as a full session of its
+/// own — own log, own recovery, own saga — under a deterministic
+/// <see cref="ChildSessionId"/>. The handed-off goal is the only state that
+/// crosses (ADR-0025).
+/// </summary>
+public sealed record AgentCallRequested : CallRequested
+{
+    public required string AgentName { get; init; }
+    public required string Goal { get; init; }
+    public required string ChildSessionId { get; init; }
+}
+
 /// <summary>Injected logical time (ADR-0006): core asks, the runtime answers
 /// with a recorded <see cref="TimeProvided"/>.</summary>
 public sealed record TimeRequested : CallRequested;
@@ -158,6 +171,15 @@ public abstract record CallOutcome : SessionEvent
 
 public sealed record ToolCallSucceeded : CallOutcome
 {
+    public required string ResultJson { get; init; }
+}
+
+/// <summary>The child session's final state (ADR-0023/0025). A failed child
+/// never produces this — it produces a terminal <see cref="CallFailed"/>
+/// instead (ADR-0024).</summary>
+public sealed record AgentCallSucceeded : CallOutcome
+{
+    public required string ChildSessionId { get; init; }
     public required string ResultJson { get; init; }
 }
 
