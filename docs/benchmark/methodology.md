@@ -121,19 +121,23 @@ exactly the trade-offs this benchmark exists to expose.
 
 ## 8. Relationship to the Aurelia repo, and status
 
-The harness grows out of pieces that already exist and run in CI here: the
-SIGKILL crash harness (`tests/Aurelia.CrashTests`), the seeded chaos API
-(`src/Aurelia.Runtime/Chaos.cs`), the eval runner with repeats and
-aggregation, and two published pilot experiments (`docs/experiments/`). The
-benchmark proper extracts these into a framework-neutral harness repo, so
-that Aurelia is a *contestant*, not the referee's employer. Roadmap:
+Status as of 2026-08-02 — much of the roadmap below now exists in this repo:
+the adapter-based harness with neutral scoring (`src/Aurelia.Benchmark`,
+[harness.md](harness.md)), the **harness-owned HTTP tool server** making
+fault injection physical (`src/Aurelia.ToolServer`), and N=100 results for
+seven contestants: Aurelia, two floor baselines, and two key-discipline
+variants each of **LangGraph** and **Temporal**
+(`docs/experiments/004…005`, raw data committed). Still owed before
+anything public: extraction into a framework-neutral repo (Aurelia must be a
+*contestant*, not the referee's employer) and **maintainer review of each
+framework implementation** — the LangGraph and Temporal task code here is
+ours and unreviewed by their teams. Original roadmap:
 
-1. Freeze this methodology (invite criticism first).
-2. Extract the neutral harness: task spec, ledger service, fault-injecting
-   tool/model endpoints, run orchestrator, scoring.
-3. Implement the task on the floor baseline and Aurelia; publish those two
-   as the pilot with full raw data.
-4. Add frameworks one at a time, maintainer review each.
+1. ~~Freeze this methodology~~ (drafted; criticism still invited).
+2. ~~Extract the neutral harness~~ (adapter contract + HTTP tool boundary done, in-repo).
+3. ~~Floor baseline + Aurelia pilot with raw data~~ (experiments 003–004).
+4. Add frameworks one at a time, maintainer review each — LangGraph and
+   Temporal implemented and measured; *review outreach pending disclosure*.
 
 Criticism of this methodology is the most useful contribution this project
 can receive right now — especially from people who maintain the frameworks
