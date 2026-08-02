@@ -53,5 +53,16 @@
   { "name": "triage-saga-notify-fails", "agent": "case-triage",
     "goal": "please credit case 42",
     "failNotifications": true, "expectStatus": "failed",
+    "expectLedger": ["credit", "reversal"] },
+
+  { "name": "concierge-42-happy", "agent": "concierge",
+    "goal": "hello, please credit case 42",
+    "expectFinalContains": ["\"notified\":true", "\"caseId\":\"42\""],
+    "expectLedger": ["credit"] },
+
+  { "name": "concierge-child-saga", "agent": "concierge",
+    "goal": "please credit case 42",
+    "failNotifications": true, "expectStatus": "failed",
+    "expectFinalContains": ["sub-agent", "case-resolution"],
     "expectLedger": ["credit", "reversal"] }
 ]

@@ -112,7 +112,7 @@ if (args.Length > 0 && args[0] == "replay")
 
 if (args.Length == 0 || args[0] != "run" || sessionId is null || goal is null || storeDir is null)
 {
-    Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path> [--agent echo|case-resolution|case-triage]");
+    Console.Error.WriteLine("usage: Aurelia.Runtime run --session-id <id> --goal <text> --store-dir <path> [--agent echo|case-resolution|case-triage|concierge]");
     Console.Error.WriteLine("       Aurelia.Runtime replay --session-id <id> --store-dir <path>");
     return 2;
 }
@@ -136,6 +136,8 @@ using var host = new HostBuilder()
                 OpenAICompatibleModelClient.FromEnvironmentOrFake(), failNotify,
                 fallback: Environment.GetEnvironmentVariable("AURELIA_MODEL_FALLBACK") == "fake"
                     ? new FakeModelClient() : null),
+            "concierge" => CaseResolutionAgent.CreateConciergeDriver(eventStore, storeDir,
+                OpenAICompatibleModelClient.FromEnvironmentOrFake(), failNotify),
             _ => new ScriptedAgentDriver(eventStore,
                 new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
                 [new ScriptStep("echo", (sessionGoal, _) => sessionGoal)]),

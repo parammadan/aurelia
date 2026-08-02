@@ -25,4 +25,13 @@ public static class SessionStates
             question = approval.Question,
             approverPolicy = approval.ApproverPolicy,
         });
+
+    public static string AwaitingSubAgentJson(AgentCallRequested call, string childStateJson) =>
+        JsonSerializer.Serialize(new
+        {
+            status = "awaiting_subagent",
+            agent = call.AgentName,
+            childSessionId = call.ChildSessionId,
+            childState = JsonSerializer.Deserialize<JsonElement>(childStateJson),
+        });
 }

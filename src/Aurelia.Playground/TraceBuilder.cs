@@ -33,6 +33,7 @@ public static class TraceBuilder
 
             var (kind, name) = intent switch
             {
+                AgentCallRequested a => ("agent", $"{a.AgentName} → {a.ChildSessionId}"),
                 ModelCallRequested m => ("model", m.ModelId),
                 CompensationRequested c => ("compensation", $"{c.ToolName} reverses {c.CompensatesKey}"),
                 ToolCallRequested t => ("tool", t.ToolName),

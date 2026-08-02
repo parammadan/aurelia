@@ -42,7 +42,7 @@ app.MapPost("/api/sessions", (StartRequest req) =>
 {
     var id = $"s-{DateTime.UtcNow:HHmmss}-{Random.Shared.Next(1000, 9999)}";
     var handle = new SessionHandle(id,
-        req.Agent is "echo" or "case-triage" ? req.Agent : "case-resolution",
+        req.Agent is "echo" or "case-triage" or "concierge" ? req.Agent : "case-resolution",
         string.IsNullOrWhiteSpace(req.Goal) ? "credit for case 42" : req.Goal,
         Path.Combine(dataRoot, id), runtimeDll, req.SabotageNotify);
     sessions[id] = handle;
@@ -240,6 +240,8 @@ sealed class SessionHandle(
                 $"session FAILED · {e.Reason} · compensated: [{string.Join(", ", e.CompensatedKeys)}] · leaked: [{string.Join(", ", e.UncompensatedKeys)}]"),
             ToolCallRequested e => ("intent", $"tool intent · {e.ToolName}({Trim(e.ArgumentsJson)})"),
             ModelCallRequested e => ("intent", $"model intent · {e.ModelId}"),
+            AgentCallRequested e => ("intent", $"sub-agent intent · {e.AgentName} → session {e.ChildSessionId}"),
+            AgentCallSucceeded e => ("success", $"sub-agent result ({e.ChildSessionId}) · {Trim(e.ResultJson)}"),
             ApprovalRequested e => ("approval", $"approval requested · {e.Question}"),
             CompensationRequested e => ("compensation", $"compensate {e.CompensatesKey} via {e.ToolName}"),
             ToolCallSucceeded e => ("success", $"tool result (attempt {e.Attempt}) · {Trim(e.ResultJson)}"),

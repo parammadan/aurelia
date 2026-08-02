@@ -41,12 +41,26 @@ public sealed record ApprovalGate(
     Func<string, IReadOnlyDictionary<string, string>, string?> QuestionIfRequired,
     string ApproverPolicy) : AgentStep;
 
+/// <summary>
+/// A sub-agent step (ADR-0023): hands a goal to another agent, which runs as
+/// a full child session under a deterministic id. The child's failure is
+/// terminal for this call (ADR-0024); a paused child pauses this session too.
+/// </summary>
+public sealed record SubAgentStep(
+    string AgentName,
+    Func<string, IReadOnlyDictionary<string, string>, string> BuildGoal) : AgentStep;
+
+/// <summary>Runs a named sub-agent to completion as its own session.</summary>
+public delegate Task<SessionResult> SubAgentRunner(
+    string agentName, string childSessionId, string goal, CancellationToken ct);
+
 public sealed class ScriptedAgentDriver(
     IEventStore store,
     IReadOnlyDictionary<string, ITool> tools,
     IReadOnlyList<AgentStep> script,
     ModelRoutingPolicy? modelPolicy = null,
-    int maxAttempts = 2) : ISessionRuntime
+    int maxAttempts = 2,
+    SubAgentRunner? subAgents = null) : ISessionRuntime
 {
     public async Task<SessionResult> RunToCompletionAsync(string sessionId, string goal, CancellationToken ct = default)
     {
@@ -122,6 +136,76 @@ public sealed class ScriptedAgentDriver(
                     }
                     if (!resolution.Approved)
                         return await UnwindAsync($"approval denied by {resolution.ApproverId}");
+                    break;
+                }
+
+                case SubAgentStep sub:
+                {
+                    var runner = subAgents
+                        ?? throw new InvalidOperationException($"script has sub-agent step '{sub.AgentName}' but no sub-agent runner is configured");
+                    var request = log.OfType<AgentCallRequested>()
+                        .FirstOrDefault(r => r.StepOrdinal == stepIndex);
+                    if (request is null)
+                    {
+                        request = new AgentCallRequested
+                        {
+                            SessionId = sessionId, Sequence = ++seq, TurnOrdinal = 0, StepOrdinal = stepIndex,
+                            RecordedAt = DateTimeOffset.UtcNow,
+                            AgentName = sub.AgentName,
+                            Goal = sub.BuildGoal(goal, results),
+                            // Deterministic (ADR-0023): recovery re-derives the
+                            // same child, whose own log resumes it.
+                            ChildSessionId = $"{sessionId}.{stepIndex}",
+                        };
+                        await Append(request);
+                    }
+
+                    var childResult = log.OfType<AgentCallSucceeded>()
+                        .FirstOrDefault(o => o.IdempotencyKey == request.IdempotencyKey)?.ResultJson;
+                    if (childResult is null)
+                    {
+                        using var span = AureliaDiagnostics.Source.StartActivity("invoke_agent");
+                        span?.SetTag("aurelia.subagent.name", request.AgentName);
+                        span?.SetTag("aurelia.subagent.session", request.ChildSessionId);
+                        var child = await runner(request.AgentName, request.ChildSessionId, request.Goal, ct);
+
+                        switch (DerivedStatus(child.FinalStateJson))
+                        {
+                            case "failed":
+                                // ADR-0024: the child already unwound its own
+                                // effects; this call is terminal, no retries.
+                                await Append(new CallFailed
+                                {
+                                    SessionId = sessionId, Sequence = ++seq,
+                                    TurnOrdinal = request.TurnOrdinal, StepOrdinal = request.StepOrdinal,
+                                    RecordedAt = DateTimeOffset.UtcNow, Attempt = 1,
+                                    Error = $"sub-agent '{request.AgentName}' ({request.ChildSessionId}) failed",
+                                });
+                                return await UnwindAsync($"sub-agent '{request.AgentName}' failed");
+
+                            case "awaiting_approval" or "awaiting_subagent":
+                                // A paused child pauses the parent: no outcome,
+                                // no terminal event; re-driving resumes both.
+                                sessionSpan?.SetTag("aurelia.session.awaiting_subagent", true);
+                                return new SessionResult(sessionId,
+                                    SessionStates.AwaitingSubAgentJson(request, child.FinalStateJson));
+
+                            default:
+                                await Append(new AgentCallSucceeded
+                                {
+                                    SessionId = sessionId, Sequence = ++seq,
+                                    TurnOrdinal = request.TurnOrdinal, StepOrdinal = request.StepOrdinal,
+                                    RecordedAt = DateTimeOffset.UtcNow, Attempt = 1,
+                                    ChildSessionId = request.ChildSessionId,
+                                    ResultJson = child.FinalStateJson,
+                                });
+                                childResult = child.FinalStateJson;
+                                break;
+                        }
+                    }
+
+                    results[sub.AgentName] = childResult!;
+                    lastResult = childResult;
                     break;
                 }
 
@@ -373,6 +457,15 @@ public sealed class ScriptedAgentDriver(
         string LastError(string key) =>
             log.OfType<CallAttemptFailed>().Where(f => f.IdempotencyKey == key)
                 .OrderBy(f => f.Sequence).LastOrDefault()?.Error ?? "unknown error";
+    }
+
+    private static string DerivedStatus(string finalStateJson)
+    {
+        using var doc = JsonDocument.Parse(finalStateJson);
+        return doc.RootElement.ValueKind == JsonValueKind.Object
+            && doc.RootElement.TryGetProperty("status", out var status)
+            ? status.GetString() ?? "completed"
+            : "completed";
     }
 
     private static string DescribeRoute(string routeClass, ModelRoute route)
