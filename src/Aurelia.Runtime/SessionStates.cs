@@ -8,6 +8,23 @@ namespace Aurelia.Runtime;
 
 public static class SessionStates
 {
+    /// <summary>
+    /// The single derivation of a session's status from its event log
+    /// (completed / failed / awaiting_approval / in_flight), plus the pending
+    /// approval when there is one. Every surface (playground, trace viewer,
+    /// MCP) uses this so they cannot drift.
+    /// </summary>
+    public static (string Status, ApprovalRequested? PendingApproval) Derive(IReadOnlyList<SessionEvent> events)
+    {
+        if (events.Any(e => e is SessionCompleted))
+            return ("completed", null);
+        if (events.Any(e => e is SessionFailed))
+            return ("failed", null);
+        var pending = events.OfType<ApprovalRequested>().FirstOrDefault(r =>
+            !events.OfType<ApprovalResolved>().Any(o => o.IdempotencyKey == r.IdempotencyKey));
+        return pending is not null ? ("awaiting_approval", pending) : ("in_flight", null);
+    }
+
     /// <summary>Derives the status from a final-state JSON: the value of its
     /// "status" property, or "completed" when none is present.</summary>
     public static string StatusOf(string finalStateJson)

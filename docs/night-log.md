@@ -18,3 +18,17 @@ nothing public. Param reviews everything in the morning.
 - Wrote docs/experiments/004-benchmark-n100.md + committed raw data.
 - Opening PR (unmerged, for morning review). Next wake: playground tests +
   status-derivation dedup, then neutral harness extraction.
+
+## Wake 3 (~04:45 ET)
+- Deduplicated session-status derivation: SessionStates.Derive is now the
+  single source; playground snapshot, trace viewer, and MCP all consume it
+  (defense-pack weakness #2 closed).
+- Added TraceBuilder tests: call pairing/durations, child links, pending
+  approvals, retry counts, saga compensation (weakness #8 closed).
+- GOTCHA worth remembering: referencing the web-SDK Playground project from
+  Aurelia.CrashTests silently pruned the test output's copy of
+  Aurelia.Runtime's dependency closure, killing the child-process crash
+  harness with FileNotFoundException. Fix: playground tests live in their own
+  test project (tests/Aurelia.PlaygroundTests); the crash-test project stays
+  reference-minimal. Suite: 59 tests green.
+- Next wake: neutral benchmark harness extraction.

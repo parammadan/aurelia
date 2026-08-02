@@ -190,28 +190,16 @@ sealed class SessionHandle(
     {
         var events = await Store.ReadAsync(sessionId);
 
-        string status;
-        object? approval = null;
-        if (events.OfType<SessionCompleted>().Any())
-            status = "completed";
-        else if (events.OfType<SessionFailed>().Any())
-            status = "failed";
-        else
+        var (status, pending) = SessionStates.Derive(events);
+        object? approval = pending is null
+            ? null
+            : new { key = pending.IdempotencyKey, question = pending.Question };
+        if (status == "in_flight")
         {
-            var pending = events.OfType<ApprovalRequested>().FirstOrDefault(r =>
-                !events.OfType<ApprovalResolved>().Any(o => o.IdempotencyKey == r.IdempotencyKey));
-            if (pending is not null)
-            {
-                status = "awaiting_approval";
-                approval = new { key = pending.IdempotencyKey, question = pending.Question };
-            }
-            else
-            {
-                bool running;
-                lock (_gate)
-                    running = _current is { HasExited: false };
-                status = running ? "running" : "worker_down";
-            }
+            bool running;
+            lock (_gate)
+                running = _current is { HasExited: false };
+            status = running ? "running" : "worker_down";
         }
 
         object[] workers;

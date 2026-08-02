@@ -15,13 +15,7 @@ public static class TraceBuilder
         var tEnd = events[^1].RecordedAt;
         double Ms(DateTimeOffset t) => (t - t0).TotalMilliseconds;
 
-        var status =
-            events.Any(e => e is SessionCompleted) ? "completed"
-            : events.Any(e => e is SessionFailed) ? "failed"
-            : events.OfType<ApprovalRequested>().Any(r =>
-                !events.OfType<ApprovalResolved>().Any(o => o.IdempotencyKey == r.IdempotencyKey))
-                ? "awaiting_approval"
-                : "in_flight";
+        var (status, _) = SessionStates.Derive(events);
 
         var calls = events.OfType<CallRequested>().Select(intent =>
         {
