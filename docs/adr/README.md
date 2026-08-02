@@ -31,6 +31,8 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0023](0023-subagents-are-child-sessions.md) | Sub-agents are child sessions behind a two-phase call | Accepted |
 | [0024](0024-child-failure-is-terminal-for-the-call.md) | A failed child is immediately terminal for the parent's call | Accepted |
 | [0025](0025-explicit-handoff-only.md) | Parent and child share state by explicit handoff only | Accepted |
+| [0026](0026-queue-delivery-maps-to-session-identity.md) | Queue delivery maps to deterministic session identity | Accepted |
+| [0027](0027-retry-policy.md) | Retry policy: declared attempts with exponential backoff | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.
