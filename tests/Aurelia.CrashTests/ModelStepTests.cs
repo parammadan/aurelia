@@ -112,7 +112,7 @@ public class ModelStepTests
         public string ParametersJson => inner.ParametersJson;
         public string ConfigVersion => inner.ConfigVersion;
 
-        public Task<string> CompleteAsync(string promptJson, CancellationToken ct = default)
+        public Task<ModelCompletion> CompleteAsync(string promptJson, CancellationToken ct = default)
         {
             if (_failed < failures)
             {

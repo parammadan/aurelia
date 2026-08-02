@@ -30,8 +30,11 @@ public class RoutingTests
             Assert.Contains(fake.ModelId, intent.RoutingReason);
 
             var outcome = Assert.Single(log.OfType<ModelCallSucceeded>());
-            Assert.Equal(2, outcome.SchemaVersion);
+            Assert.Equal(3, outcome.SchemaVersion);
             Assert.Equal(fake.ModelId, outcome.ModelId);
+            // Token usage recorded on the outcome (v3): the log is the cost record.
+            Assert.True(outcome.InputTokens > 0);
+            Assert.True(outcome.OutputTokens > 0);
         }
         finally
         {
@@ -140,10 +143,10 @@ public class RoutingTests
         public string ParametersJson => "{}";
         public string ConfigVersion => "slow-v1";
 
-        public async Task<string> CompleteAsync(string promptJson, CancellationToken ct = default)
+        public async Task<ModelCompletion> CompleteAsync(string promptJson, CancellationToken ct = default)
         {
             await Task.Delay(delayMs, ct);
-            return """{"caseId":"42"}""";
+            return new ModelCompletion("""{"caseId":"42"}""");
         }
     }
 }
