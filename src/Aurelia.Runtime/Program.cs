@@ -82,17 +82,21 @@ if (args.Length > 0 && args[0] == "eval")
         foreach (var group in outcomes.GroupBy(o => o.Name))
         {
             var times = group.Select(o => o.DurationMs).OrderBy(d => d).ToArray();
+            var tokens = (In: group.Sum(o => o.InputTokens), Out: group.Sum(o => o.OutputTokens));
             Console.WriteLine(
                 $"{group.Key,-28} {group.Count(o => o.Passed)}/{group.Count()} passed · " +
                 $"p50 {times[times.Length / 2],7:F0} ms · " +
                 $"p95 {times[Math.Min(times.Length - 1, (int)(times.Length * 0.95))],7:F0} ms · " +
-                $"min {times[0]:F0} · max {times[^1]:F0}");
+                $"min {times[0]:F0} · max {times[^1]:F0}" +
+                (tokens.In + tokens.Out > 0 ? $" · tokens {tokens.In}in/{tokens.Out}out" : ""));
         }
     }
     var durations = outcomes.Select(o => o.DurationMs).OrderBy(d => d).ToArray();
     var p50All = durations[durations.Length / 2];
     var p95All = durations[Math.Min(durations.Length - 1, (int)(durations.Length * 0.95))];
-    Console.WriteLine($"{outcomes.Count(o => o.Passed)}/{outcomes.Count} passed · p50 {p50All:F0} ms · p95 {p95All:F0} ms");
+    var totalTokens = (In: outcomes.Sum(o => o.InputTokens), Out: outcomes.Sum(o => o.OutputTokens));
+    Console.WriteLine($"{outcomes.Count(o => o.Passed)}/{outcomes.Count} passed · p50 {p50All:F0} ms · p95 {p95All:F0} ms" +
+        (totalTokens.In + totalTokens.Out > 0 ? $" · tokens {totalTokens.In}in/{totalTokens.Out}out" : ""));
     return outcomes.All(o => o.Passed) ? 0 : 1;
 }
 

@@ -22,7 +22,9 @@ public sealed record EvalScenario
     public string? OnApproval { get; init; }                  // approve | deny | null
 }
 
-public sealed record EvalOutcome(string Name, bool Passed, double DurationMs, string? Failure);
+public sealed record EvalOutcome(
+    string Name, bool Passed, double DurationMs, string? Failure,
+    long InputTokens = 0, long OutputTokens = 0);
 
 public static class EvalRunner
 {
@@ -50,36 +52,56 @@ public static class EvalRunner
             {
                 var clock = Stopwatch.StartNew();
                 string? failure;
+                var tokens = (In: 0L, Out: 0L);
                 try
                 {
-                    failure = await RunScenarioAsync(scenario, chaos, ct);
+                    (failure, tokens) = await RunScenarioAsync(scenario, chaos, ct);
                 }
                 catch (Exception ex)
                 {
                     failure = $"{ex.GetType().Name}: {ex.Message}";
                 }
-                outcomes.Add(new EvalOutcome(scenario.Name, failure is null, clock.Elapsed.TotalMilliseconds, failure));
+                outcomes.Add(new EvalOutcome(scenario.Name, failure is null, clock.Elapsed.TotalMilliseconds,
+                    failure, tokens.In, tokens.Out));
             }
         }
         return outcomes;
     }
 
-    private static async Task<string?> RunScenarioAsync(EvalScenario s, ChaosSource? chaos, CancellationToken ct)
+    private static async Task<(string? Failure, (long In, long Out) Tokens)> RunScenarioAsync(
+        EvalScenario s, ChaosSource? chaos, CancellationToken ct)
     {
         var dir = Directory.CreateTempSubdirectory("aurelia-eval-");
         try
         {
             var store = new FileEventStore(dir.FullName);
+            var failure = await RunChecksAsync(s, chaos, store, dir.FullName, ct);
+            // Token usage summed from the event log — the log is the cost record.
+            var modelOutcomes = (await store.ReadAsync("eval", ct)).OfType<ModelCallSucceeded>().ToList();
+            return (failure,
+                (modelOutcomes.Sum(o => (long)(o.InputTokens ?? 0)),
+                 modelOutcomes.Sum(o => (long)(o.OutputTokens ?? 0))));
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    private static async Task<string?> RunChecksAsync(
+        EvalScenario s, ChaosSource? chaos, FileEventStore store, string dirPath, CancellationToken ct)
+    {
+        {
             var echoTools = new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() };
             ISessionRuntime driver = s.Agent switch
             {
-                "case-resolution" => CaseResolutionAgent.CreateDriver(store, dir.FullName, s.FailNotifications, chaos),
+                "case-resolution" => CaseResolutionAgent.CreateDriver(store, dirPath, s.FailNotifications, chaos),
                 // Uses the real endpoint when AURELIA_MODEL_ENDPOINT is set,
                 // the deterministic fake otherwise — same suite either way.
-                "case-triage" => CaseResolutionAgent.CreateTriageDriver(store, dir.FullName,
+                "case-triage" => CaseResolutionAgent.CreateTriageDriver(store, dirPath,
                     OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications,
                     OpenAICompatibleModelClient.FallbackFromEnvironment(), chaos),
-                "concierge" => CaseResolutionAgent.CreateConciergeDriver(store, dir.FullName,
+                "concierge" => CaseResolutionAgent.CreateConciergeDriver(store, dirPath,
                     OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications, chaos),
                 "echo" => new ScriptedAgentDriver(store,
                     chaos is null ? echoTools : chaos.WrapTools(echoTools),
@@ -117,7 +139,7 @@ public static class EvalRunner
 
             if (s.ExpectLedger is not null)
             {
-                var ledger = LedgerTypes(Path.Combine(dir.FullName, "ledger.jsonl"));
+                var ledger = LedgerTypes(Path.Combine(dirPath, "ledger.jsonl"));
                 if (!ledger.SequenceEqual(s.ExpectLedger))
                     return $"expected ledger [{string.Join(",", s.ExpectLedger)}], got [{string.Join(",", ledger)}]";
             }
@@ -130,10 +152,6 @@ public static class EvalRunner
             }
 
             return null;
-        }
-        finally
-        {
-            dir.Delete(recursive: true);
         }
     }
 

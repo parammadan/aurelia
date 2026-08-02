@@ -103,10 +103,13 @@ async function load() {
     const width = Math.max(0.5, ((end - c.startMs) / t.totalMs) * 100);
     const dur = c.endMs == null ? "…" : `${Math.round(c.endMs - c.startMs)} ms`;
     const retries = c.attempts > 1 ? ` <span class="attempts">×${c.attempts} attempts</span>` : "";
+    const childLink = c.childSessionId
+      ? ` <a href="/trace.html?session=${encodeURIComponent(c.childSessionId)}" onclick="event.stopPropagation()">child trace ↗</a>`
+      : "";
     return `
       <div class="lane" onclick="document.getElementById('d${i}').classList.toggle('open')">
         <div class="label"><span class="kind ${c.kind}">${c.kind}</span>
-          <span>${esc(c.name)}${retries}</span></div>
+          <span>${esc(c.name)}${retries}${childLink}</span></div>
         <div class="track"><div class="bar ${c.status}" style="left:${left}%;width:${width}%"></div></div>
         <div class="dur">${dur}</div>
       </div>

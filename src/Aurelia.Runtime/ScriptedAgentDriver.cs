@@ -281,15 +281,17 @@ public sealed class ScriptedAgentDriver(
                         // ADR-0022: attempt 1 = primary under its budget; later
                         // attempts = the fallback (unbudgeted) when one exists.
                         string? servedBy = null;
+                        ModelCompletion? completion = null;
                         var call = await ExecuteCallAsync(request, "invoke_model", request.ModelId,
-                            (attempt, token) =>
+                            async (attempt, token) =>
                             {
                                 var client = attempt == 1 ? route.Primary : route.Fallback ?? route.Primary;
                                 servedBy = client.ModelId;
                                 // The budget binds the primary on every attempt;
                                 // the fallback is the unbudgeted last resort.
                                 var budget = ReferenceEquals(client, route.Primary) ? route.LatencyBudget : null;
-                                return InvokeWithBudgetAsync(client, request.PromptJson, budget, token);
+                                completion = await InvokeWithBudgetAsync(client, request.PromptJson, budget, token);
+                                return completion.Content;
                             });
                         if (call is null)
                             return await UnwindAsync(LastError(request.IdempotencyKey));
@@ -300,6 +302,8 @@ public sealed class ScriptedAgentDriver(
                             RecordedAt = DateTimeOffset.UtcNow,
                             Attempt = call.Value.Attempt, OutputJson = call.Value.Result,
                             ModelId = servedBy,
+                            InputTokens = completion?.InputTokens,
+                            OutputTokens = completion?.OutputTokens,
                         });
                         recorded = call.Value.Result;
                     }
@@ -480,7 +484,7 @@ public sealed class ScriptedAgentDriver(
 
     // A budget breach must read as an attempt failure, not a cancellation:
     // a real caller cancellation still aborts the activation (ADR-0022).
-    private static async Task<string> InvokeWithBudgetAsync(
+    private static async Task<ModelCompletion> InvokeWithBudgetAsync(
         IModelClient client, string promptJson, TimeSpan? budget, CancellationToken ct)
     {
         if (budget is null)

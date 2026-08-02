@@ -48,6 +48,7 @@ public static class TraceBuilder
                 key = intent.IdempotencyKey,
                 kind,
                 name,
+                childSessionId = (intent as AgentCallRequested)?.ChildSessionId,
                 startMs = Ms(intent.RecordedAt),
                 endMs = terminal is null ? (double?)null : Ms(terminal.RecordedAt),
                 attempts = outcomes.Count == 0 ? 1 : outcomes.Max(o => o.Attempt),
