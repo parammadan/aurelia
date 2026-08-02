@@ -8,6 +8,17 @@ namespace Aurelia.Runtime;
 
 public static class SessionStates
 {
+    /// <summary>Derives the status from a final-state JSON: the value of its
+    /// "status" property, or "completed" when none is present.</summary>
+    public static string StatusOf(string finalStateJson)
+    {
+        using var doc = JsonDocument.Parse(finalStateJson);
+        return doc.RootElement.ValueKind == JsonValueKind.Object
+            && doc.RootElement.TryGetProperty("status", out var status)
+            ? status.GetString() ?? "completed"
+            : "completed";
+    }
+
     public static string FailedJson(SessionFailed failed) =>
         JsonSerializer.Serialize(new
         {

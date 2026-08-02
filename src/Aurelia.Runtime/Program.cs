@@ -12,11 +12,12 @@ using Orleans.Configuration;
 using System.Net;
 using System.Net.Sockets;
 
-string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null, filter = null, chaosSpec = null;
+string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null, filter = null, chaosSpec = null, queue = null, messageId = null;
 var agent = "echo";
 var approver = "cli";
 var deny = false;
 var repeat = 1;
+var maxMessages = 100;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -32,6 +33,9 @@ for (var i = 1; i < args.Length; i++)
         case "--repeat" when i + 1 < args.Length: _ = int.TryParse(args[++i], out repeat); break;
         case "--filter" when i + 1 < args.Length: filter = args[++i]; break;
         case "--chaos" when i + 1 < args.Length: chaosSpec = args[++i]; break;
+        case "--queue" when i + 1 < args.Length: queue = args[++i]; break;
+        case "--message-id" when i + 1 < args.Length: messageId = args[++i]; break;
+        case "--max" when i + 1 < args.Length: _ = int.TryParse(args[++i], out maxMessages); break;
     }
 }
 
@@ -111,6 +115,31 @@ if (args.Length > 0 && args[0] == "replay")
     var replayEngine = new ReconstructionReplayEngine(EventStores.FromEnvironment(storeDir));
     var replayed = await replayEngine.ReplayAsync(sessionId);
     Console.WriteLine($"REPLAYED_FINAL_STATE {replayed.FinalStateJson}");
+    return 0;
+}
+
+// Queue-triggered autonomous ingestion (ADR-0026): messages become durable
+// sessions; duplicate delivery is a no-op resume by construction.
+if (args.Length > 0 && args[0] is "send" or "listen")
+{
+    var fqdn = Environment.GetEnvironmentVariable("AURELIA_SERVICEBUS");
+    if (fqdn is null || queue is null)
+    {
+        Console.Error.WriteLine("usage: set AURELIA_SERVICEBUS=<ns>.servicebus.windows.net, then");
+        Console.Error.WriteLine("       Aurelia.Runtime send   --queue <q> --goal <text> [--message-id <id>]");
+        Console.Error.WriteLine("       Aurelia.Runtime listen --queue <q> --store-dir <path> [--max <n>]");
+        return 2;
+    }
+    if (args[0] == "send")
+    {
+        if (goal is null) { Console.Error.WriteLine("send requires --goal"); return 2; }
+        await ServiceBusIngestion.SendAsync(fqdn, queue, goal, messageId);
+        return 0;
+    }
+    if (storeDir is null) { Console.Error.WriteLine("listen requires --store-dir"); return 2; }
+    var handled = await ServiceBusIngestion.ListenAsync(
+        fqdn, queue, storeDir, maxMessages, TimeSpan.FromSeconds(10));
+    Console.WriteLine($"processed {handled} message(s)");
     return 0;
 }
 
