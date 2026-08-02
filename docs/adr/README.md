@@ -28,6 +28,9 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0020](0020-routing-decision-recorded-on-intent.md) | The routing decision is recorded on the model intent | Accepted |
 | [0021](0021-route-classes-and-policy-map.md) | Routing is route classes resolved by a policy map | Accepted |
 | [0022](0022-latency-budget-breach-falls-back.md) | A latency budget breach is an attempt failure that falls back | Accepted |
+| [0023](0023-subagents-are-child-sessions.md) | Sub-agents are child sessions behind a two-phase call | Accepted |
+| [0024](0024-child-failure-is-terminal-for-the-call.md) | A failed child is immediately terminal for the parent's call | Accepted |
+| [0025](0025-explicit-handoff-only.md) | Parent and child share state by explicit handoff only | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.
