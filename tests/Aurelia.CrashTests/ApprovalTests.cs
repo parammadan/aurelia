@@ -123,17 +123,21 @@ public class ApprovalTests
             IReadOnlyList<AgentStep> script =
             [
                 new ScriptStep("lookup_case", ctx => ctx.UserMessage),
-                new ApprovalGate(_ => "approve this?", "manager", Expiry: TimeSpan.FromMilliseconds(60)),
+                new ApprovalGate(_ => "approve this?", "manager", Expiry: TimeSpan.FromMinutes(1)),
                 new ScriptStep("issue_service_credit", ctx => ctx.Results["lookup_case"]),
                 new ScriptStep("notify_customer", ctx => ctx.Results["issue_service_credit"]),
             ];
+            // Virtual time: the driver observes this clock for expiry decisions,
+            // so the test advances time instead of sleeping past a real deadline.
+            var virtualNow = new DateTimeOffset(2026, 8, 2, 12, 0, 0, TimeSpan.Zero);
             ScriptedAgentDriver Driver() => new(store,
-                CaseResolutionAgent.CreateInProcessTools(dir.FullName), script);
+                CaseResolutionAgent.CreateInProcessTools(dir.FullName), script,
+                clock: () => virtualNow);
 
             var paused = await Driver().RunToCompletionAsync("exp", "credit for case 42");
             Assert.Contains("awaiting_approval", paused.FinalStateJson);
 
-            await Task.Delay(150); // let the deadline pass
+            virtualNow += TimeSpan.FromMinutes(5); // the deadline passes, virtually
             var done = await Driver().RunToCompletionAsync("exp", "credit for case 42");
 
             using var final = JsonDocument.Parse(done.FinalStateJson);

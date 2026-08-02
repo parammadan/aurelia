@@ -72,10 +72,16 @@ public sealed class ScriptedAgentDriver(
     ModelRoutingPolicy? modelPolicy = null,
     RetryPolicy? retryPolicy = null,
     SubAgentRunner? subAgents = null,
-    MemoryPolicy? memory = null) : ISessionRuntime
+    MemoryPolicy? memory = null,
+    Func<DateTimeOffset>? clock = null) : ISessionRuntime
 {
     private readonly RetryPolicy _retry = retryPolicy ?? RetryPolicy.Default;
     private readonly MemoryPolicy _memory = memory ?? MemoryPolicy.Default;
+    // The clock the runtime OBSERVES for decisions (expiry). Decisions still
+    // ride the RECORDED TimeProvided value (ADRs 0006/0013); injecting the
+    // observation lets tests use virtual time. RecordedAt stamps stay
+    // wall-clock — they are observability metadata, never decision inputs.
+    private readonly Func<DateTimeOffset> _now = clock ?? (static () => DateTimeOffset.UtcNow);
     private IReadOnlyList<AgentStep> Script => script;
 
     // ── Single-shot entry (goal-driven / queue agents): turn 0, terminal ────
@@ -202,7 +208,7 @@ public sealed class ScriptedAgentDriver(
                             RecordedAt = DateTimeOffset.UtcNow,
                             Question = question,
                             ApproverPolicy = gate.ApproverPolicy,
-                            ExpiresAt = gate.Expiry is { } expiry ? DateTimeOffset.UtcNow + expiry : null,
+                            ExpiresAt = gate.Expiry is { } expiry ? _now() + expiry : null,
                         };
                         await a.AppendAsync(approval);
                     }
@@ -233,7 +239,7 @@ public sealed class ScriptedAgentDriver(
                         var recordedNow = timeKey is null ? (DateTimeOffset?)null
                             : a.Log.OfType<TimeProvided>()
                                 .FirstOrDefault(o => o.IdempotencyKey == timeKey.IdempotencyKey)?.Value;
-                        if (recordedNow is null && DateTimeOffset.UtcNow >= deadline)
+                        if (recordedNow is null && _now() >= deadline)
                         {
                             var timeRequest = new TimeRequested
                             {
@@ -247,7 +253,7 @@ public sealed class ScriptedAgentDriver(
                                 SessionId = a.SessionId, Sequence = a.NextSeq(),
                                 TurnOrdinal = timeRequest.TurnOrdinal, StepOrdinal = timeRequest.StepOrdinal,
                                 RecordedAt = DateTimeOffset.UtcNow, Attempt = 1,
-                                Value = DateTimeOffset.UtcNow,
+                                Value = _now(),
                             });
                             recordedNow = a.Log.OfType<TimeProvided>().Last().Value;
                         }
