@@ -24,7 +24,7 @@ flowchart TD
         CS["Copilot Studio (via MCP)"]
     end
     SESSION["Durable Agent Session<br/>(Orleans actor — holds no state)"]
-    LOG[("Append-only Event Log<br/>today: JSONL file store · planned: Cosmos DB")]
+    LOG[("Append-only Event Log<br/>JSONL file store (default) · Cosmos DB (serverless, Entra-only)")]
     ROUTE["Model Routing 🗺️<br/>Azure OpenAI"]
     TOOLS["Tool Execution<br/>idempotency keys + sagas"]
     OTEL["OpenTelemetry<br/>→ trace replay"]
@@ -134,8 +134,8 @@ Full log, including superseded decisions, in [docs/adr](docs/adr/README.md). The
 
 Planned ≠ built. Nothing below exists yet.
 
-- 🗺️ Cosmos DB event store (partition per session) with Blob Storage for large payloads
-- 🗺️ Orchestration intelligence: model *routing* across Azure OpenAI deployments, latency budgets, multi-agent coordination, Semantic Kernel interop. (Durable model calls exist today: `--agent case-triage` records the full prompt/model/config as events, substitutes recorded outputs on resume, and talks to any OpenAI-compatible endpoint via `AURELIA_MODEL_ENDPOINT` — a local Ollama, vLLM on a GPU cluster, or Azure OpenAI.)
+- 🗺️ Blob Storage offload for large event payloads (the Cosmos DB event store exists: partition per session, head-document optimistic concurrency, Entra-only — set `AURELIA_COSMOS_ENDPOINT`; see [ADR-0019](docs/adr/0019-cosmos-event-store.md) and `infra/main.bicep`)
+- 🗺️ Multi-agent coordination, context/memory tiers, Semantic Kernel interop. (Model *routing* exists today: route classes resolved by a named policy, per-route latency budgets with fallback, the decision recorded on the intent — [ADRs 0020–0022](docs/adr/README.md). Durable model calls talk to any OpenAI-compatible endpoint via `AURELIA_MODEL_ENDPOINT` — a local Ollama, vLLM on a GPU cluster, or Azure OpenAI.)
 - 🗺️ The **Orchestration Reliability Benchmark** — failure-injection scoring of recovery rate and correctness-after-recovery, across frameworks (a thin eval runner exists today: `evals/phase1.json`, run in CI)
 - 🗺️ Hosted playground with a chaos button; trace replay viewer on Application Insights data
 - 🗺️ Teams bot (Azure Bot Service), browser voice, and the mid-session channel handoff

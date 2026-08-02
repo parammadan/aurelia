@@ -60,7 +60,7 @@ public class ModelStepTests
             var flaky = new FlakyModelClient(new FakeModelClient(), failures: 1);
             var driver = new ScriptedAgentDriver(store,
                 CaseResolutionAgent.CreateTools(dir.FullName),
-                CaseResolutionAgent.TriageScript, flaky);
+                CaseResolutionAgent.TriageScript, ModelRoutingPolicy.Single(flaky));
 
             var result = await driver.RunToCompletionAsync("triage-flaky", "credit case 42");
 
@@ -89,7 +89,7 @@ public class ModelStepTests
             var dead = new FlakyModelClient(new FakeModelClient(), failures: 99);
             var driver = new ScriptedAgentDriver(store,
                 CaseResolutionAgent.CreateTools(dir.FullName),
-                CaseResolutionAgent.TriageScript, dead);
+                CaseResolutionAgent.TriageScript, ModelRoutingPolicy.Single(dead));
 
             var result = await driver.RunToCompletionAsync("triage-dead", "credit case 42");
 

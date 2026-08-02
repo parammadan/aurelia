@@ -27,8 +27,8 @@ flowchart TD
     end
 
     subgraph INTEL["Intelligence"]
+        ROUTE["ModelRoutingPolicy — today<br/>route classes · latency budgets · fallback"]
         MODEL["IModelClient — today<br/>any OpenAI-compatible endpoint"]
-        AOAI["Azure OpenAI routing 🗺️<br/>small/fast ↔ large/planner"]
         SKMCP["Semantic Kernel · MCP tools 🗺️"]
     end
 
@@ -44,8 +44,7 @@ flowchart TD
     FILE --> UPCAST --> DRIVER
     FILE --> REPLAY
     DRIVER --> OTELN
-    DRIVER --> MODEL
-    MODEL -.-> AOAI
+    DRIVER --> ROUTE --> MODEL
     DRIVER -.-> SKMCP
     FILE ---|same contract| COSMOS
     COSMOS -.-> BLOB
