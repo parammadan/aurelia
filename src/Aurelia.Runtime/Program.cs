@@ -12,7 +12,7 @@ using Orleans.Configuration;
 using System.Net;
 using System.Net.Sockets;
 
-string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null, filter = null;
+string? sessionId = null, goal = null, storeDir = null, suite = null, approvalKey = null, filter = null, chaosSpec = null;
 var agent = "echo";
 var approver = "cli";
 var deny = false;
@@ -31,6 +31,7 @@ for (var i = 1; i < args.Length; i++)
         case "--deny": deny = true; break;
         case "--repeat" when i + 1 < args.Length: _ = int.TryParse(args[++i], out repeat); break;
         case "--filter" when i + 1 < args.Length: filter = args[++i]; break;
+        case "--chaos" when i + 1 < args.Length: chaosSpec = args[++i]; break;
     }
 }
 
@@ -67,7 +68,9 @@ if (args.Length > 0 && args[0] == "eval")
         Console.Error.WriteLine("usage: Aurelia.Runtime eval --suite <path>");
         return 2;
     }
-    var outcomes = await EvalRunner.RunSuiteAsync(suite, repeat, filter);
+    if (chaosSpec is not null)
+        Console.WriteLine($"chaos: {chaosSpec}");
+    var outcomes = await EvalRunner.RunSuiteAsync(suite, repeat, filter, chaosSpec);
     if (repeat <= 1)
     {
         foreach (var o in outcomes)

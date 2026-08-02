@@ -49,13 +49,21 @@ public static class CaseResolutionAgent
     ];
 
     public static ScriptedAgentDriver CreateDriver(
-        IEventStore store, string storeDir, bool failNotifications = false) =>
-        new(store, CreateTools(storeDir, failNotifications), Script);
+        IEventStore store, string storeDir, bool failNotifications = false, ChaosSource? chaos = null)
+    {
+        var tools = CreateTools(storeDir, failNotifications);
+        return new(store, chaos is null ? tools : chaos.WrapTools(tools), Script);
+    }
 
     public static ScriptedAgentDriver CreateTriageDriver(
         IEventStore store, string storeDir, IModelClient modelClient, bool failNotifications = false,
-        IModelClient? fallback = null)
+        IModelClient? fallback = null, ChaosSource? chaos = null)
     {
+        if (chaos is not null)
+        {
+            modelClient = chaos.WrapModel(modelClient);
+            fallback = fallback is null ? null : chaos.WrapModel(fallback);
+        }
         // Latency budget for the classify route, if configured (ADR-0022).
         TimeSpan? budget = int.TryParse(Environment.GetEnvironmentVariable("AURELIA_MODEL_BUDGET_MS"), out var ms) && ms > 0
             ? TimeSpan.FromMilliseconds(ms)
@@ -65,7 +73,8 @@ public static class CaseResolutionAgent
             ["classify"] = new(modelClient, fallback, budget),
             ["general"] = new(modelClient),
         });
-        return new(store, CreateTools(storeDir, failNotifications), TriageScript, policy);
+        var tools = CreateTools(storeDir, failNotifications);
+        return new(store, chaos is null ? tools : chaos.WrapTools(tools), TriageScript, policy);
     }
 
     public static IReadOnlyDictionary<string, ITool> CreateTools(

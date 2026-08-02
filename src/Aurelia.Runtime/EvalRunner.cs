@@ -29,8 +29,12 @@ public static class EvalRunner
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public static async Task<IReadOnlyList<EvalOutcome>> RunSuiteAsync(
-        string suitePath, int repeat = 1, string? filter = null, CancellationToken ct = default)
+        string suitePath, int repeat = 1, string? filter = null, string? chaosSpec = null,
+        CancellationToken ct = default)
     {
+        // One seeded source for the whole run: the fault sequence is
+        // reproducible from the spec (scenarios execute sequentially).
+        var chaos = chaosSpec is null ? null : new ChaosSource(ChaosPolicy.Parse(chaosSpec));
         var scenarios = JsonSerializer.Deserialize<List<EvalScenario>>(
             await File.ReadAllTextAsync(suitePath, ct), Json)
             ?? throw new InvalidOperationException($"empty suite: {suitePath}");
@@ -48,7 +52,7 @@ public static class EvalRunner
                 string? failure;
                 try
                 {
-                    failure = await RunScenarioAsync(scenario, ct);
+                    failure = await RunScenarioAsync(scenario, chaos, ct);
                 }
                 catch (Exception ex)
                 {
@@ -60,22 +64,23 @@ public static class EvalRunner
         return outcomes;
     }
 
-    private static async Task<string?> RunScenarioAsync(EvalScenario s, CancellationToken ct)
+    private static async Task<string?> RunScenarioAsync(EvalScenario s, ChaosSource? chaos, CancellationToken ct)
     {
         var dir = Directory.CreateTempSubdirectory("aurelia-eval-");
         try
         {
             var store = new FileEventStore(dir.FullName);
+            var echoTools = new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() };
             ISessionRuntime driver = s.Agent switch
             {
-                "case-resolution" => CaseResolutionAgent.CreateDriver(store, dir.FullName, s.FailNotifications),
+                "case-resolution" => CaseResolutionAgent.CreateDriver(store, dir.FullName, s.FailNotifications, chaos),
                 // Uses the real endpoint when AURELIA_MODEL_ENDPOINT is set,
                 // the deterministic fake otherwise — same suite either way.
                 "case-triage" => CaseResolutionAgent.CreateTriageDriver(store, dir.FullName,
                     OpenAICompatibleModelClient.FromEnvironmentOrFake(), s.FailNotifications,
-                    OpenAICompatibleModelClient.FallbackFromEnvironment()),
+                    OpenAICompatibleModelClient.FallbackFromEnvironment(), chaos),
                 "echo" => new ScriptedAgentDriver(store,
-                    new Dictionary<string, ITool> { ["echo"] = new BlockableEchoTool() },
+                    chaos is null ? echoTools : chaos.WrapTools(echoTools),
                     [new ScriptStep("echo", (goal, _) => goal)]),
                 _ => throw new InvalidOperationException($"unknown agent '{s.Agent}'"),
             };
