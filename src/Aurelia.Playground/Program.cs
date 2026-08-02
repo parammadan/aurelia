@@ -255,3 +255,6 @@ sealed class SessionHandle(
         public string Fate { get; set; } = "running";
     }
 }
+
+// Exposes the entry point to WebApplicationFactory-based endpoint tests.
+public partial class Program { }
