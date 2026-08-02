@@ -47,12 +47,29 @@ if (!File.Exists(runtimeDll))
     return 2;
 }
 
-IFrameworkAdapter[] adapters =
-[
+var adapters = new List<IFrameworkAdapter>
+{
     new AureliaAdapter(runtimeDll),
     new PlainAdapter(runtimeDll, resubmitsOnFailure: true),
     new PlainAdapter(runtimeDll, resubmitsOnFailure: false),
-];
+};
+
+// LangGraph joins only behind the physical tool boundary, and only where its
+// venv exists (benchmark/adapters/langgraph/README-less setup: python3 -m venv
+// .venv && .venv/bin/pip install -r requirements.txt).
+if (toolServerDll is not null)
+{
+    var lgDir = Path.Combine(
+        Directory.GetParent(toolServerDll)!.Parent!.Parent!.Parent!.Parent!.Parent!.FullName,
+        "benchmark", "adapters", "langgraph");
+    var lgPython = Path.Combine(lgDir, ".venv", "bin", "python");
+    var lgScript = Path.Combine(lgDir, "case_resolution.py");
+    if (File.Exists(lgPython) && File.Exists(lgScript))
+    {
+        adapters.Add(new LangGraphAdapter(lgPython, lgScript, uuidKeys: false));
+        adapters.Add(new LangGraphAdapter(lgPython, lgScript, uuidKeys: true));
+    }
+}
 string[] faults = ["F0", "F1", "F6"];
 
 var allRuns = new List<object>();
