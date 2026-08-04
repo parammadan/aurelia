@@ -19,6 +19,8 @@ public static class EventSerialization
         [nameof(SessionCompleted)] = typeof(SessionCompleted),
         [nameof(SessionFailed)] = typeof(SessionFailed),
         [nameof(CancellationRequested)] = typeof(CancellationRequested),
+        [nameof(ToolCallProposed)] = typeof(ToolCallProposed),
+        [nameof(PolicyDenied)] = typeof(PolicyDenied),
         [nameof(ToolCallRequested)] = typeof(ToolCallRequested),
         [nameof(AgentCallRequested)] = typeof(AgentCallRequested),
         [nameof(AgentCallSucceeded)] = typeof(AgentCallSucceeded),

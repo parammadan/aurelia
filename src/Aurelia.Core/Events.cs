@@ -105,6 +105,31 @@ public sealed record CancellationRequested : SessionEvent
     public required string RequestedBy { get; init; }
 }
 
+/// <summary>
+/// What was ASKED FOR, before any boundary decided (ADR-0044). Deliberately
+/// NOT a <see cref="CallRequested"/>: it carries no idempotency key, because
+/// it is not a call. Nothing may retry it, deduplicate against it, or read it
+/// as "this may have executed".
+/// </summary>
+public sealed record ToolCallProposed : SessionEvent
+{
+    public required string ToolName { get; init; }
+    public required string ArgumentsJson { get; init; }
+    public required string ProposedBy { get; init; }
+}
+
+/// <summary>
+/// The deterministic boundary's refusal (ADR-0044). Paired with a
+/// <see cref="ToolCallProposed"/> and followed by NO intent event — the
+/// absence is the proof that nothing was issued.
+/// </summary>
+public sealed record PolicyDenied : SessionEvent
+{
+    public required string ToolName { get; init; }
+    public required string Reason { get; init; }
+    public required string DeniedBy { get; init; }
+}
+
 // ── External calls: intent phase (ADR-0008) ──────────────────────────────────
 // An intent is durable BEFORE execution begins. An intent with no terminal
 // outcome means the call may have executed and may have had side effects.

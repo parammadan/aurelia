@@ -49,6 +49,14 @@ public sealed record SubAgentStep(
     string AgentName,
     Func<TurnContext, string> BuildGoal) : AgentStep;
 
+/// <summary>
+/// The deterministic boundary (ADR-0044): given a tool and its arguments,
+/// return a refusal reason, or null to allow. Pure — it sees no clock and no
+/// randomness — and it runs BEFORE the intent is written, so nothing the
+/// model says can move it.
+/// </summary>
+public delegate string? ToolCallPolicy(string toolName, string argumentsJson);
+
 /// <summary>Runs a named sub-agent to completion as its own session.</summary>
 public delegate Task<SessionResult> SubAgentRunner(
     string agentName, string childSessionId, string goal, CancellationToken ct);
@@ -73,7 +81,8 @@ public sealed class ScriptedAgentDriver(
     RetryPolicy? retryPolicy = null,
     SubAgentRunner? subAgents = null,
     MemoryPolicy? memory = null,
-    Func<DateTimeOffset>? clock = null) : ISessionRuntime
+    Func<DateTimeOffset>? clock = null,
+    ToolCallPolicy? toolPolicy = null) : ISessionRuntime
 {
     private readonly RetryPolicy _retry = retryPolicy ?? RetryPolicy.Default;
     private readonly MemoryPolicy _memory = memory ?? MemoryPolicy.Default;
@@ -350,12 +359,41 @@ public sealed class ScriptedAgentDriver(
                         .FirstOrDefault(r => r.TurnOrdinal == turn && r.StepOrdinal == stepIndex);
                     if (request is null)
                     {
+                        // The boundary decides BEFORE an intent exists
+                        // (ADR-0044). A refusal records what was asked and why
+                        // it was refused — and writes no intent at all, so the
+                        // absence itself proves nothing was issued.
+                        var proposedArgs = tool.BuildArguments(context);
+                        if (toolPolicy?.Invoke(tool.ToolName, proposedArgs) is { } denial)
+                        {
+                            await a.AppendAsync(new ToolCallProposed
+                            {
+                                SessionId = a.SessionId, Sequence = a.NextSeq(),
+                                TurnOrdinal = turn, StepOrdinal = stepIndex,
+                                RecordedAt = DateTimeOffset.UtcNow,
+                                ToolName = tool.ToolName,
+                                ArgumentsJson = proposedArgs,
+                                ProposedBy = "agent",
+                            });
+                            await a.AppendAsync(new PolicyDenied
+                            {
+                                SessionId = a.SessionId, Sequence = a.NextSeq(),
+                                TurnOrdinal = turn, StepOrdinal = stepIndex,
+                                RecordedAt = DateTimeOffset.UtcNow,
+                                ToolName = tool.ToolName,
+                                Reason = denial,
+                                DeniedBy = "policy",
+                            });
+                            return new ScriptRun(null,
+                                await UnwindAsync(a, $"policy denied: {denial}"));
+                        }
+
                         request = new ToolCallRequested
                         {
                             SessionId = a.SessionId, Sequence = a.NextSeq(), TurnOrdinal = turn, StepOrdinal = stepIndex,
                             RecordedAt = DateTimeOffset.UtcNow,
                             ToolName = tool.ToolName,
-                            ArgumentsJson = tool.BuildArguments(context),
+                            ArgumentsJson = proposedArgs,
                         };
                         await a.AppendAsync(request);
                     }
