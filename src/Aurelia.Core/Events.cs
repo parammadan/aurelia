@@ -106,6 +106,18 @@ public sealed record CancellationRequested : SessionEvent
 }
 
 /// <summary>
+/// Provenance for a counterfactual fork (ADR-0045): this session's log begins
+/// as a copy of <see cref="SourceSessionId"/> through
+/// <see cref="AtSequence"/>, and diverges from here. Not a call — nothing
+/// executes because of it, and replay ignores it.
+/// </summary>
+public sealed record ForkedFrom : SessionEvent
+{
+    public required string SourceSessionId { get; init; }
+    public required long AtSequence { get; init; }
+}
+
+/// <summary>
 /// What was ASKED FOR, before any boundary decided (ADR-0044). Deliberately
 /// NOT a <see cref="CallRequested"/>: it carries no idempotency key, because
 /// it is not a call. Nothing may retry it, deduplicate against it, or read it
