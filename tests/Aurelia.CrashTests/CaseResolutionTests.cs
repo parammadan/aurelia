@@ -50,6 +50,37 @@ public class CaseResolutionTests
     }
 
     [Fact]
+    public async Task An_effect_that_cannot_be_compensated_is_named_not_omitted()
+    {
+        // The triage script's lookup is a plain ITool: it succeeded, and no
+        // compensation for it can ever exist. Before ADR-0042 such a call was
+        // filtered out of the unwind and vanished from the terminal report —
+        // "nothing happened", which is the opposite of the truth.
+        using var fixture = new Fixture(failNotifications: true);
+        var result = await fixture.Driver.RunToCompletionAsync("case-unrec", "service credit for case 42");
+
+        using var final = JsonDocument.Parse(result.FinalStateJson);
+        Assert.Equal("failed", final.RootElement.GetProperty("status").GetString());
+
+        var unrecoverable = final.RootElement.GetProperty("unrecoverableKeys")
+            .EnumerateArray().Select(e => e.GetString()!).ToList();
+        var log = await fixture.Store.ReadAsync("case-unrec");
+        var lookupKey = log.OfType<ToolCallRequested>()
+            .First(r => r.ToolName == "lookup_case").IdempotencyKey;
+        Assert.Contains(lookupKey, unrecoverable);
+
+        // The compensatable credit is still reported the old way, and the
+        // three lists stay disjoint.
+        var compensated = final.RootElement.GetProperty("compensatedKeys")
+            .EnumerateArray().Select(e => e.GetString()!).ToList();
+        Assert.DoesNotContain(lookupKey, compensated);
+        Assert.Empty(compensated.Intersect(unrecoverable));
+
+        var replayed = await new ReconstructionReplayEngine(fixture.Store).ReplayAsync("case-unrec");
+        Assert.Equal(result.FinalStateJson, replayed.FinalStateJson);
+    }
+
+    [Fact]
     public async Task Flaky_compensation_is_retried_under_the_same_key()
     {
         using var fixture = new Fixture(failNotifications: true, compensationFailures: 1);

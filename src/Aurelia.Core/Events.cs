@@ -75,9 +75,21 @@ public sealed record SessionCompleted : SessionEvent
 /// </summary>
 public sealed record SessionFailed : SessionEvent
 {
+    public SessionFailed() { SchemaVersion = 2; }
+
     public required string Reason { get; init; }
+
+    /// <summary>Succeeded calls that were reversed.</summary>
     public required IReadOnlyList<string> CompensatedKeys { get; init; }
+
+    /// <summary>Succeeded calls whose compensation was attempted and failed.</summary>
     public required IReadOnlyList<string> UncompensatedKeys { get; init; }
+
+    /// <summary>Succeeded calls that could never be compensated, because the
+    /// tool does not implement <see cref="ICompensatableTool"/> (ADR-0042).
+    /// "We tried and failed" and "this can never be undone" demand different
+    /// human responses; hiding the second is how ledgers drift from reality.</summary>
+    public IReadOnlyList<string> UnrecoverableKeys { get; init; } = [];
 }
 
 // ── External calls: intent phase (ADR-0008) ──────────────────────────────────

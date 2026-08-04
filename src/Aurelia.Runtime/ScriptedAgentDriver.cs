@@ -530,12 +530,22 @@ public sealed class ScriptedAgentDriver(
     // ── Saga unwind (ADRs 0015-0017): terminal for the whole session ────────
     private async Task<SessionResult> UnwindAsync(Activation a, string reason)
     {
-        var toCompensate = a.Log.OfType<ToolCallSucceeded>()
+        // Every succeeded call is accounted for; none is filtered away silently
+        // (ADR-0042). Compensatable ones are unwound in reverse order of
+        // success; the rest are reported as unrecoverable.
+        var succeeded = a.Log.OfType<ToolCallSucceeded>()
             .Select(ok => (Outcome: ok, Intent: a.Log.OfType<ToolCallRequested>()
                 .FirstOrDefault(r => r.IdempotencyKey == ok.IdempotencyKey)))
-            .Where(pair => pair.Intent is not null
-                && tools[pair.Intent!.ToolName] is ICompensatableTool)
+            .Where(pair => pair.Intent is not null)
             .OrderByDescending(pair => pair.Outcome.Sequence)
+            .ToList();
+
+        var toCompensate = succeeded
+            .Where(pair => tools[pair.Intent!.ToolName] is ICompensatableTool)
+            .ToList();
+        var unrecoverable = succeeded
+            .Where(pair => tools[pair.Intent!.ToolName] is not ICompensatableTool)
+            .Select(pair => pair.Intent!.IdempotencyKey)
             .ToList();
 
         var compensated = new List<string>();
@@ -593,6 +603,7 @@ public sealed class ScriptedAgentDriver(
             Reason = reason,
             CompensatedKeys = compensated,
             UncompensatedKeys = uncompensated,
+            UnrecoverableKeys = unrecoverable,
         };
         await a.AppendAsync(failed);
         return new SessionResult(a.SessionId, SessionStates.FailedJson(failed));

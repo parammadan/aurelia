@@ -43,6 +43,7 @@ public static class SessionStates
             reason = failed.Reason,
             compensatedKeys = failed.CompensatedKeys,
             uncompensatedKeys = failed.UncompensatedKeys,
+            unrecoverableKeys = failed.UnrecoverableKeys,
         });
 
     public static string AwaitingApprovalJson(ApprovalRequested approval) =>
