@@ -190,6 +190,13 @@ public sealed class ScriptedAgentDriver(
 
         for (var stepIndex = 0; stepIndex < script.Count; stepIndex++)
         {
+            // SAFE POINT (ADR-0043): a cancellation is honoured here, between
+            // steps — never mid-call, so no in-flight two-phase call is ever
+            // abandoned. Whatever already committed unwinds through the saga.
+            if (Cancellations.PendingIn(a.Log) is { } cancelled)
+                return new ScriptRun(null,
+                    await UnwindAsync(a, $"cancelled by {cancelled.RequestedBy}: {cancelled.Reason}"));
+
             switch (script[stepIndex])
             {
                 case ApprovalGate gate:
@@ -606,7 +613,7 @@ public sealed class ScriptedAgentDriver(
             UnrecoverableKeys = unrecoverable,
         };
         await a.AppendAsync(failed);
-        return new SessionResult(a.SessionId, SessionStates.FailedJson(failed));
+        return new SessionResult(a.SessionId, SessionStates.TerminalJson(a.Log, failed));
     }
 
     // ── Keyed retries with backoff (ADRs 0010, 0027) ─────────────────────────

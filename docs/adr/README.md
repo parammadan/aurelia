@@ -48,6 +48,7 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0040](0040-benchmark-harness-in-repo.md) | The benchmark harness lives in-repo behind a neutral adapter contract | Accepted |
 | [0041](0041-plain-loop-floor-baseline.md) | The plain loop is the benchmark's floor baseline | Accepted |
 | [0042](0042-session-failed-reports-unrecoverable-effects.md) | SessionFailed reports the effects it could not undo | Accepted |
+| [0043](0043-cancellation-is-a-durable-signal.md) | Cancellation is a durable signal honoured at safe points | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.

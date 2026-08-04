@@ -92,6 +92,19 @@ public sealed record SessionFailed : SessionEvent
     public IReadOnlyList<string> UnrecoverableKeys { get; init; } = [];
 }
 
+/// <summary>
+/// A durable request to stop this session (ADR-0043). Appended by any
+/// process, honoured by the runtime at the next SAFE POINT — between steps,
+/// never mid-call, because abandoning a two-phase call would forge the crash
+/// signature that recovery depends on. Committed effects then unwind through
+/// the ordinary saga path.
+/// </summary>
+public sealed record CancellationRequested : SessionEvent
+{
+    public required string Reason { get; init; }
+    public required string RequestedBy { get; init; }
+}
+
 // ── External calls: intent phase (ADR-0008) ──────────────────────────────────
 // An intent is durable BEFORE execution begins. An intent with no terminal
 // outcome means the call may have executed and may have had side effects.

@@ -80,7 +80,7 @@ public sealed class ReconstructionReplayEngine(IEventStore store) : IReplayEngin
             throw new EventLogIntegrityException(sessionId,
                 "both SessionCompleted and SessionFailed present");
         if (failed is not null)
-            return new SessionResult(sessionId, SessionStates.FailedJson(failed));
+            return new SessionResult(sessionId, SessionStates.TerminalJson(log, failed));
         if (completed is not null)
             return new SessionResult(sessionId, completed.FinalStateJson);
 
