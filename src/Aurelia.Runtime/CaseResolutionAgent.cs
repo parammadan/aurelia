@@ -68,15 +68,17 @@ public static class CaseResolutionAgent
 
     public static ScriptedAgentDriver CreateTriageDriver(
         IEventStore store, string storeDir, IModelClient modelClient, bool failNotifications = false,
-        IModelClient? fallback = null, ChaosSource? chaos = null)
+        IModelClient? fallback = null, ChaosSource? chaos = null, TimeSpan? budget = null)
     {
         if (chaos is not null)
         {
             modelClient = chaos.WrapModel(modelClient);
             fallback = fallback is null ? null : chaos.WrapModel(fallback);
         }
-        // Latency budget for the classify route, if configured (ADR-0022).
-        TimeSpan? budget = int.TryParse(Environment.GetEnvironmentVariable("AURELIA_MODEL_BUDGET_MS"), out var ms) && ms > 0
+        // Latency budget for the classify route (ADR-0022). An explicit value
+        // wins over the environment, so a test can set one without touching
+        // process-wide state.
+        budget ??= int.TryParse(Environment.GetEnvironmentVariable("AURELIA_MODEL_BUDGET_MS"), out var ms) && ms > 0
             ? TimeSpan.FromMilliseconds(ms)
             : null;
         var policy = new ModelRoutingPolicy("triage-v1", new Dictionary<string, ModelRoute>

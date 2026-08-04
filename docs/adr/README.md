@@ -51,6 +51,7 @@ acceptance — a reversed decision gets a new ADR that supersedes the old one.
 | [0043](0043-cancellation-is-a-durable-signal.md) | Cancellation is a durable signal honoured at safe points | Accepted |
 | [0044](0044-proposals-and-policy-denials-are-recorded.md) | A refused call is recorded as a proposal and a denial, never as an intent | Accepted |
 | [0045](0045-forks-record-their-lineage.md) | A fork records its lineage in its own log | Accepted |
+| [0046](0046-endpoint-fault-injection.md) | Endpoint faults are injected as endpoint faults | Accepted |
 
 New entries: copy [template.md](template.md), number sequentially, add to this
 table in the same commit.

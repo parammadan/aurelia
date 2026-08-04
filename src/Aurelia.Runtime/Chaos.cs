@@ -103,3 +103,55 @@ public sealed class ChaosModelClient(IModelClient inner, ChaosSource chaos) : IM
         return inner.CompleteAsync(promptJson, ct);
     }
 }
+
+/// <summary>
+/// Deterministic endpoint faults (ADR-0046) — the failures a real provider
+/// actually produces, on demand rather than by probability. Distinct from
+/// <see cref="ChaosModelClient"/> on purpose: this is a fault switch for
+/// demonstrating failover, not a statistical experiment.
+/// </summary>
+public sealed class FaultyModelClient(
+    IModelClient inner,
+    EndpointFault fault = EndpointFault.RateLimited,
+    int failFirst = 1,
+    TimeSpan? spike = null) : IModelClient
+{
+    private int _calls;
+
+    public string ModelId => inner.ModelId;
+    public string ParametersJson => inner.ParametersJson;
+    public string ConfigVersion => inner.ConfigVersion;
+
+    /// <summary>How many calls this client has been asked to serve, faults
+    /// included — the demo shows it to prove the primary was really tried.</summary>
+    public int Calls => _calls;
+
+    public async Task<ModelCompletion> CompleteAsync(string promptJson, CancellationToken ct = default)
+    {
+        var call = Interlocked.Increment(ref _calls);
+        if (call <= failFirst)
+            switch (fault)
+            {
+                case EndpointFault.RateLimited:
+                    throw new HttpRequestException(
+                        $"429 Too Many Requests: rate limit exceeded for model '{inner.ModelId}'");
+                case EndpointFault.LatencySpike:
+                    // Delegates eventually; the point is to breach the caller's
+                    // latency budget exactly as a slow provider would.
+                    await Task.Delay(spike ?? TimeSpan.FromSeconds(5), ct);
+                    break;
+                case EndpointFault.HardFailure:
+                    throw new HttpRequestException(
+                        $"connection reset by the endpoint serving '{inner.ModelId}'");
+            }
+
+        return await inner.CompleteAsync(promptJson, ct);
+    }
+}
+
+public enum EndpointFault
+{
+    RateLimited,
+    LatencySpike,
+    HardFailure,
+}
