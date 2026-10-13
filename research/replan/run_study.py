@@ -11,6 +11,7 @@ Usage:
   python3 run_study.py --config config.json --out ... --only-cell 0 --n 2   # smoke
 """
 import argparse
+import concurrent.futures
 import itertools
 import json
 import os
@@ -26,7 +27,13 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 TOOLSERVER = REPO / "src/Aurelia.ToolServer/bin/Release/net10.0/Aurelia.ToolServer.dll"
 TASK_ID = "case42"
-GOAL = "Hi, case 42 has been broken all week. I'd like the service credit I'm owed."
+GOALS = {
+    "credit": "Hi, case 42 has been broken all week. I'd like the service credit I'm owed.",
+    "memo": "Hi, case 42 has been broken all week. I'd like the service credit I'm owed.",
+    "two": "Hi, cases 42 and 7 have both been broken all week. I'd like the service credits I'm owed on both.",
+}
+EXPECTED_CASES = {"credit": ["42"], "memo": ["42"], "two": ["42", "7"]}
+MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT", "http://127.0.0.1:11434/v1")
 
 
 def start_server(store, signals):
@@ -43,8 +50,10 @@ def start_server(store, signals):
 
 
 def agent_cmd(cell, run_seed, server, work, invocation):
+    task = cell.get("task", "credit")
     return [sys.executable, "-I", str(HERE / "agent.py"),
-            "--task-id", TASK_ID, "--goal", GOAL, "--server", server,
+            "--task-id", TASK_ID, "--goal", GOALS[task], "--task", task,
+            "--model-endpoint", MODEL_ENDPOINT, "--server", server,
             "--state", str(work / "state.json"), "--trace", str(work / "trace.jsonl"),
             "--granularity", cell["granularity"], "--keys", cell["keys"],
             "--model", cell["model"], "--temperature", str(cell["temperature"]),
@@ -94,11 +103,22 @@ def run_once(cell, run_seed, kill_wait_s, recovery_timeout_s):
         trace = read_jsonl(work / "trace.jsonl")
         credits = [e for e in ledger if e["type"] == "credit"]
         credit_calls = [e for e in trace if e["kind"] == "tool_call" and e["name"] == "issue_service_credit"]
-        notified = any(e["kind"] == "tool_result" and e["name"] == "notify_customer"
-                       and '"notified": true' in e["result"] and e["inv"] == 1 for e in trace)
+        expected = EXPECTED_CASES[cell.get("task", "credit")]
+        per_case = {c: sum(1 for e in credits if str(e["caseId"]) == c) for c in expected}
+        notified_cases = set()
+        for e in trace:
+            if e["kind"] == "tool_result" and e["name"] == "notify_customer":
+                try:
+                    res = json.loads(e["result"])
+                except json.JSONDecodeError:
+                    continue
+                if res.get("notified") is True:
+                    notified_cases.add(str(res.get("caseId")))
+        notified = all(c in notified_cases for c in expected)
         reasked = any(e["kind"] == "model" and e["inv"] == 1 and
                       any(c["name"] == "issue_service_credit" for c in e["tool_calls"]) for e in trace)
         completed = recovery_exit == 0 and notified
+        lost = completed and any(n == 0 for n in per_case.values())
         return {
             **cell, "seed": run_seed,
             "kill_triggered": killed,
@@ -110,8 +130,10 @@ def run_once(cell, run_seed, kill_wait_s, recovery_timeout_s):
             "recovery_reasked_for_credit": reasked,
             "recovery_exit": recovery_exit,
             "completed": completed,
-            "correct": completed and len(credits) == 1,
-            "duplicate": len(credits) > 1,
+            "credits_per_case": per_case,
+            "correct": completed and all(n == 1 for n in per_case.values()) and len(credits) == len(expected),
+            "duplicate": any(n > 1 for n in per_case.values()),
+            "lost_effect": lost,
             "model_calls": sum(e["kind"] == "model" for e in trace),
             "victim_tail": "" if killed else victim.stdout.read()[-300:],
             "recovery_tail": recovery_out[-300:],
@@ -124,9 +146,16 @@ def run_once(cell, run_seed, kill_wait_s, recovery_timeout_s):
 
 def cells(config):
     f = config["factors"]
-    for model, gran, keys, temp in itertools.product(
-            f["model"], f["granularity"], f["keys"], f["temperature"]):
-        yield {"model": model, "granularity": gran, "keys": keys, "temperature": temp}
+    for task, model, gran, keys, temp in itertools.product(
+            f.get("task", ["credit"]), f["model"], f["granularity"], f["keys"], f["temperature"]):
+        cell = {"model": model, "granularity": gran, "keys": keys, "temperature": temp}
+        if "task" in f:
+            cell = {"task": task, **cell}
+        yield cell
+
+
+def row_key(r):
+    return (r.get("task", "credit"), r["model"], r["granularity"], r["keys"], r["temperature"], r["seed"])
 
 
 def main():
@@ -135,6 +164,7 @@ def main():
     p.add_argument("--out", required=True)
     p.add_argument("--only-cell", type=int)
     p.add_argument("--n", type=int, help="override N (smoke tests only)")
+    p.add_argument("--workers", type=int, default=1, help="concurrent runs (isolated dirs and servers)")
     args = p.parse_args()
     config = json.loads(pathlib.Path(args.config).read_text())
     if not TOOLSERVER.exists():
@@ -143,19 +173,19 @@ def main():
     n = args.n or config["n_per_cell"]
     out = pathlib.Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    done = {(r["model"], r["granularity"], r["keys"], r["temperature"], r["seed"])
-            for r in read_jsonl(out)}  # resumable
+    done = {row_key(r) for r in read_jsonl(out)}  # resumable
     all_cells = list(cells(config))
     chosen = [all_cells[args.only_cell]] if args.only_cell is not None else all_cells
-    for ci, cell in enumerate(chosen):
-        for i in range(n):
-            seed = config["base_seed"] + i
-            if (cell["model"], cell["granularity"], cell["keys"], cell["temperature"], seed) in done:
-                continue
-            row = run_once(cell, seed, config["kill_wait_s"], config["recovery_timeout_s"])
+    jobs = [(cell, config["base_seed"] + i) for cell in chosen for i in range(n)
+            if row_key({**cell, "seed": config["base_seed"] + i}) not in done]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {pool.submit(run_once, cell, seed, config["kill_wait_s"],
+                               config["recovery_timeout_s"]): (cell, seed) for cell, seed in jobs}
+        for count, fut in enumerate(concurrent.futures.as_completed(futures), 1):
+            row = fut.result()
             with out.open("a") as f:
                 f.write(json.dumps(row) + "\n")
-            print(f"[{ci + 1}/{len(chosen)} run {i + 1}/{n}] {cell} kill={row['kill_triggered']} "
+            print(f"[{count}/{len(jobs)}] {futures[fut][0]} seed={row['seed']} kill={row['kill_triggered']} "
                   f"credits={row['credits']} correct={row['correct']}", flush=True)
 
 

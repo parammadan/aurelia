@@ -69,6 +69,36 @@ STRING_ARGS = {"caseId", "creditId"}
 NUMBER_ARGS = {"entitledCreditUsd"}
 MAX_MODEL_CALLS = 8
 
+# Round 2 task variants (docs/research/preregistration-r2.md). "credit" is the
+# R1 task, unchanged.
+MEMO_SYSTEM = SYSTEM.replace(
+    "with the caseId and entitledCreditUsd from the lookup result",
+    "with the caseId and entitledCreditUsd from the lookup result and a short "
+    "customer-facing reason you write yourself")
+TWO_SYSTEM = (
+    "You are a customer-service agent. The customer may name several cases. For "
+    "EACH case, one tool call at a time: lookup_case, then issue_service_credit "
+    "with the caseId and entitledCreditUsd from that lookup, then notify_customer "
+    "with the creditId and caseId from that credit result. When every named case "
+    "has been notified, reply with a one-sentence summary."
+)
+MAX_MODEL_CALLS_TWO = 14
+
+
+def task_spec(task):
+    if task == "credit":
+        return SYSTEM, TOOLS, MAX_MODEL_CALLS
+    if task == "memo":
+        tools = json.loads(json.dumps(TOOLS))
+        credit = tools[1]["function"]["parameters"]
+        credit["properties"]["reason"] = {
+            "type": "string", "description": "Customer-facing reason for the credit, in your own words."}
+        credit["required"].append("reason")
+        return MEMO_SYSTEM, tools, MAX_MODEL_CALLS
+    if task == "two":
+        return TWO_SYSTEM, TOOLS, MAX_MODEL_CALLS_TWO
+    raise ValueError(task)
+
 
 class Trace:
     def __init__(self, path, invocation):
@@ -89,8 +119,8 @@ def post(url, body, timeout):
         return json.loads(response.read())
 
 
-def ask_model(args, messages, seed):
-    body = {"model": args.model, "messages": messages, "tools": TOOLS,
+def ask_model(args, messages, seed, tools):
+    body = {"model": args.model, "messages": messages, "tools": tools,
             "temperature": args.temperature, "seed": seed}
     return post(f"{args.model_endpoint}/chat/completions", body, 300)["choices"][0]["message"]
 
@@ -158,7 +188,9 @@ def main():
     p.add_argument("--temperature", type=float, required=True)
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--invocation", type=int, default=0)
+    p.add_argument("--task", choices=["credit", "memo", "two"], default="credit")
     args = p.parse_args()
+    system, tools, max_calls = task_spec(args.task)
     trace = Trace(args.trace, args.invocation)
 
     state = load_state(args.state)
@@ -167,7 +199,7 @@ def main():
         return 0
     if state is None or args.granularity == "turn":
         # turn: nothing durable mid-run, so recovery starts the turn over.
-        state = {"messages": [{"role": "system", "content": SYSTEM},
+        state = {"messages": [{"role": "system", "content": system},
                               {"role": "user", "content": args.goal}],
                  "model_calls": 0}
     trace.write("start", resumed_messages=len(state["messages"]))
@@ -222,7 +254,7 @@ def main():
                 persist_step()
             continue
 
-        if state["model_calls"] >= MAX_MODEL_CALLS:
+        if state["model_calls"] >= max_calls:
             trace.write("give_up")
             print("ERROR model-call budget exhausted", file=sys.stderr)
             return 1
@@ -231,7 +263,7 @@ def main():
         # provider, as in production (no provider guarantees replay-stable
         # sampling). Reproducible from --seed.
         seed = args.seed * 1000 + args.invocation * 100 + state["model_calls"]
-        message = ask_model(args, state["messages"], seed)
+        message = ask_model(args, state["messages"], seed, tools)
         state["model_calls"] += 1
         calls = message.get("tool_calls") or []
         trace.write("model", tool_calls=[{"id": c["id"], "name": c["function"]["name"],
