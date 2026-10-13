@@ -4,6 +4,8 @@ R=/scratch/madan.pa/aurelia-r2
 export PATH=$R/dotnet:$PATH DOTNET_ROOT=$R/dotnet DOTNET_CLI_TELEMETRY_OPTOUT=1
 export OLLAMA_MODELS=$R/models OLLAMA_HOST=127.0.0.1:$((11400 + SLURM_JOB_ID % 500))
 export MODEL_ENDPOINT=http://$OLLAMA_HOST/v1
+# The cluster sets http(s)_proxy; local servers must bypass it.
+export no_proxy=127.0.0.1,localhost NO_PROXY=127.0.0.1,localhost
 module load python/3.13.5 >/dev/null 2>&1 || true
 
 start_ollama() {
