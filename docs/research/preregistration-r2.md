@@ -51,3 +51,20 @@ turn-level recovery**: each one fails on a task shape that is common in
 practice (free text in arguments, several effects in one turn). Only
 recording the model's decision before acting is safe in every case. That's
 the paper's thesis.
+
+## Amendment A1 — 2026-10-13, before any measured R2 run (analysis only)
+
+Found in the GPU smoke test (3 runs, scratch only, not reported). Primary
+outcomes, hypotheses, and run code are **unchanged**; only how two secondary
+columns are read changes. Both are computed from raw fields the frozen code
+already records (`credit_calls`, `credit_keys`).
+
+1. **Wrong amount (new descriptive column).** The ledger does not check the
+   amount against the entitlement, so a run can be "correct" (one credit per
+   case) with the wrong amount — the smoke test had $50 + $50 instead of
+   $25 + $40. We report `wrong_amount`: any ledger credit whose amount differs
+   from the case's entitlement (42 → $25, 7 → $40). `correct` is unchanged.
+2. **Re-ask on the `two` task is not interpretable.** Recovery legitimately
+   asks the model to decide the *second* case, so `recovery_reasked_for_credit`
+   is true even under step recording. Re-ask is reported for `credit` and
+   `memo` only; for `two` the column shows "n/a".

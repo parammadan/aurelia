@@ -12,13 +12,28 @@ import sys
 
 from analyze import pct, wilson
 
+ENTITLEMENT = {"42": 25.0, "7": 40.0}
+
+
+def wrong_amount(r):
+    # Amendment A1: the amount the ledger accepted for each credit key is the
+    # first call (in invocation order) that carried that key.
+    for key in r["credit_keys"]:
+        call = next((c for c in sorted(r["credit_calls"], key=lambda c: c["inv"]) if c["key"] == key), None)
+        if call is None:
+            continue
+        case = str(call["arguments"].get("caseId"))
+        if ENTITLEMENT.get(case) != call["arguments"].get("entitledCreditUsd"):
+            return True
+    return False
+
 
 def main(path):
     rows = [json.loads(l) for l in open(path) if l.strip()]
     stats = collections.OrderedDict()
     for r in rows:
         k = (r["task"], r["model"], r["granularity"], r["keys"], r["temperature"])
-        s = stats.setdefault(k, {"runs": 0, "n": 0, "dup": 0, "lost": 0, "reask": 0, "completed": 0, "correct": 0})
+        s = stats.setdefault(k, {"runs": 0, "n": 0, "dup": 0, "lost": 0, "reask": 0, "completed": 0, "correct": 0, "wrong_amount": 0})
         s["runs"] += 1
         if not r["kill_triggered"]:
             continue
@@ -28,6 +43,7 @@ def main(path):
         s["reask"] += r["recovery_reasked_for_credit"]
         s["completed"] += r["completed"]
         s["correct"] += r["correct"]
+        s["wrong_amount"] += wrong_amount(r)
 
     def ci(k, n):
         if n == 0:
@@ -37,11 +53,12 @@ def main(path):
 
     print("# Paper 1 — round 2 results\n")
     print(f"Source: `{path}` · {len(rows)} runs · analysis per the approved R2 pre-registration.\n")
-    print("| task | model | granularity | keys | T | runs | excl. | duplicate (95% CI) | lost effect (95% CI) | re-ask | completed | correct |")
-    print("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    print("| task | model | granularity | keys | T | runs | excl. | duplicate (95% CI) | lost effect (95% CI) | re-ask | completed | correct | wrong amount |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for (task, m, g, k, t), s in stats.items():
         print(f"| {task} | {m} | {g} | {k} | {t} | {s['runs']} | {s['runs'] - s['n']} | {ci(s['dup'], s['n'])} | "
-              f"{ci(s['lost'], s['n'])} | {pct(s['reask'], s['n'])} | {pct(s['completed'], s['n'])} | {pct(s['correct'], s['n'])} |")
+              f"{ci(s['lost'], s['n'])} | {'n/a' if task == 'two' else pct(s['reask'], s['n'])} | "
+              f"{pct(s['completed'], s['n'])} | {pct(s['correct'], s['n'])} | {pct(s['wrong_amount'], s['n'])} |")
 
     def cells(**f):
         names = ("task", "model", "granularity", "keys", "temperature")
