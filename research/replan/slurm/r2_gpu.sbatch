@@ -16,5 +16,10 @@ if grep -q "library=Vulkan" $L || [ "$(grep -c 'inference compute' $L)" -ne 1 ];
     echo "unexpected GPU visibility"; grep "inference compute" $L; exit 1
 fi
 warm_models || exit 1
+# Refuse to run unless every loaded model is fully on the GPU.
+if ! awk '/offloaded [0-9]+\/[0-9]+ layers to GPU/ { split($0, a, "offloaded "); split(a[2], b, /[\/ ]/); n++; if (b[1] != b[2]) bad=1 } END { exit (n >= 2 && !bad) ? 0 : 1 }' $L; then
+    echo "model not fully on GPU"; grep -E 'offloaded [0-9]+/[0-9]+ layers|n_ctx_slot' $L; exit 1
+fi
+grep -E 'offloaded [0-9]+/[0-9]+ layers|n_ctx_slot =' $L | sort -u
 mkdir -p data
 python3 -I run_study.py --config config_r2.json --out data/r2.jsonl --workers 16
