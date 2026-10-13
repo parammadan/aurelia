@@ -1,5 +1,5 @@
 {
-  "status": "DRAFT - not approved; see docs/research/preregistration.md",
+  "status": "APPROVED R1 2026-10-12, frozen code 389835f",
   "factors": {
     "model": ["qwen2.5:3b", "llama3.2:3b"],
     "granularity": ["turn", "step"],

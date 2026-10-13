@@ -1,14 +1,12 @@
 # Paper 1 — pre-registration, round 1
 
-> **STATUS: DRAFT — NOT APPROVED.** No measured run may start until Param
-> edits the predictions below to his own and writes "PREREG R1 APPROVED" with
-> the frozen commit hash. Predictions were drafted by Claude as a starting
-> point; the approved file is the record.
+> **STATUS: APPROVED 2026-10-12** by Param (explicit "Approve as drafted"),
+> predictions as drafted by Claude, unedited. Frozen code: commit `389835f`.
 
 ## Frozen configuration
 
 - Code: `research/replan/agent.py`, `research/replan/run_study.py`, tool server
-  `src/Aurelia.ToolServer` (Release build), at commit `<filled at approval>`.
+  `src/Aurelia.ToolServer` (Release build), at commit `389835f`.
 - Config: `research/replan/config.json` (factors below), copied verbatim into
   the results file header.
 - Task: service credit for case 42 (entitled $25), goal text fixed in
@@ -42,7 +40,7 @@
 - **Intervals:** Wilson 95% CI per cell. No significance tests beyond the
   pre-stated hypotheses.
 
-## Hypotheses and predictions (edit these, then approve)
+## Hypotheses and predictions
 
 | # | Prediction | Falsified by |
 |---|---|---|
