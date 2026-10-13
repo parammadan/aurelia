@@ -1,9 +1,8 @@
 # Paper 1 — pre-registration, round 2
 
-> **STATUS: DRAFT — NOT APPROVED.** R2 code lives on branch `research/r2`
-> (a separate worktree, so R1's frozen files are untouched while R1 runs).
-> Measured R2 runs need Param's explicit approval of this file AND of the
-> specific Explorer GPU job.
+> **STATUS: APPROVED 2026-10-13** by Param (explicit "Approve all three":
+> this pre-registration as drafted, predictions by Claude unedited; one GPU
+> smoke job; the R2 GPU job). Frozen code: commit `05d7ba4` on `research/r2`.
 
 R1 tests whether re-asking duplicates effects when every tool argument is
 copied from a tool result. R2 tests the two cases R1 cannot reach:
@@ -34,7 +33,7 @@ Job script: `research/replan/slurm/r2_gpu.sbatch`; config `config_r2.json`.
   case the request named. Scored per case from the ledger.
 - Duplicate is redefined per case: > 1 credit **for the same case**.
 
-## Predictions (Claude's draft — edit before approving)
+## Predictions
 
 | # | Prediction |
 |---|---|

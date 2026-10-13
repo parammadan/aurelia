@@ -1,5 +1,5 @@
 {
-  "status": "DRAFT R2 - not approved; see docs/research/preregistration-r2.md",
+  "status": "APPROVED R2 2026-10-13, frozen code 05d7ba4",
   "factors": {
     "task": ["credit", "memo", "two"],
     "model": ["qwen2.5:3b", "llama3.2:3b"],
