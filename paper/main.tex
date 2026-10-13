@@ -35,8 +35,10 @@ durable before it is acted on?) and \emph{key derivation} (provider tool-call
 id, argument hash, or position), and measure their interaction under a
 physical after-effect crash in two pre-registered rounds
 \todo{N runs, task shapes, results sentence}. A survey of the official
-documentation of 15 agent-framework configurations finds
-\todo{survey sentence}. We argue that recording the model's decision before
+documentation of 15 agent-framework configurations finds that the
+durable-execution engines prescribe step recording, while agent-SDK session
+stores and several quickstarts give turn recording or none, and no framework
+names the provider's tool-call id as the idempotency key. We argue that recording the model's decision before
 acting is a correctness requirement, not an optimization, and outline a
 correctness condition for recovered agent runs.
 \end{abstract}
@@ -290,9 +292,34 @@ says about idempotency keys. The full table, quotations, and URLs are in
 \end{itemize}
 
 \section{Discussion}
-\todo{Implications for framework defaults and docs; cost of step recording;
-towards a correctness condition: a recovered run is correct iff its effect
-history equals that of some crash-free run of the same agent.}
+\paragraph{Recording the decision is the safeguard; the key is not.}
+Across both rounds, every key scheme failed under turn recording on at least
+one common task shape: provider ids always, argument hashes once the model
+authors an argument, and position keys once the number or order of effects
+can change. Under step recording, recovery never repeated or dropped a
+decision. Frameworks that offer turn-level persistence for agents should say
+in their documentation that it does not make tool side effects safe across a
+crash, and should offer step recording for agents that write to the outside
+world.
+
+\paragraph{What step recording does not fix.} Step recording only prevents
+the \emph{recovery} from re-making a decision. It cannot stop a model from
+making a new, wrong decision later in the same run, and our 3B models often
+did: repeated credits, wrong amounts, success reported for effects that
+never happened. Those are errors of task correctness, and need checks at the
+effect boundary, such as per-case ledger invariants or amount validation,
+rather than a recovery mechanism. \todo{Round 3: whether such errors are more
+frequent after a crash.}
+
+\paragraph{Cost.} Step recording adds one durable write per model response
+before its tool calls execute. We did not measure that cost here.
+
+\paragraph{Toward a correctness condition.} A natural definition, modelled on
+linearizability~\cite{herlihy1990linearizability}: a recovered run is
+correct iff its history of external effects equals that of some crash-free
+run of the same agent under the same recorded model outputs. We plan to
+state this in TLA~\cite{lamport1994tla}, model-check the step protocol
+against it, and check our durable runtime against the specification.
 
 \section{Threats to validity}
 Small open models; one domain; we implement the patterns frameworks
