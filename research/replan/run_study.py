@@ -36,8 +36,10 @@ EXPECTED_CASES = {"credit": ["42"], "memo": ["42"], "two": ["42", "7"]}
 MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT", "http://127.0.0.1:11434/v1")
 
 
-def start_server(store, signals):
-    env = dict(os.environ, AURELIA_SIGNAL_DIR=str(signals), AURELIA_SIGNAL_AFTER_EFFECT="1")
+def start_server(store, signals, fault="after_effect"):
+    env = dict(os.environ)
+    if fault == "after_effect":
+        env.update(AURELIA_SIGNAL_DIR=str(signals), AURELIA_SIGNAL_AFTER_EFFECT="1")
     proc = subprocess.Popen(["dotnet", str(TOOLSERVER), "--data-dir", str(store)],
                             env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     deadline = time.time() + 30
@@ -66,13 +68,26 @@ def read_jsonl(path):
     return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
 
 
-def run_once(cell, run_seed, kill_wait_s, recovery_timeout_s):
+def run_once(cell, run_seed, kill_wait_s, recovery_timeout_s, fault="after_effect"):
     work = pathlib.Path(tempfile.mkdtemp(prefix="replan-"))
     store, signals = work / "store", work / "signals"
     store.mkdir(), signals.mkdir()
-    (signals / "block").write_text("")
-    server, url = start_server(store, signals)
+    if fault == "after_effect":
+        (signals / "block").write_text("")
+    server, url = start_server(store, signals, fault)
     try:
+        if fault == "none":
+            # R3 control: one crash-free invocation, scored exactly like a
+            # recovery so the outcome columns are comparable.
+            killed = False
+            try:
+                r = subprocess.run(agent_cmd(cell, run_seed, url, work, 0),
+                                   capture_output=True, text=True, timeout=recovery_timeout_s)
+                recovery_exit, recovery_out = r.returncode, r.stdout + r.stderr
+            except subprocess.TimeoutExpired:
+                recovery_exit, recovery_out = -2, ""
+            return score(cell, run_seed, store, work, killed, recovery_exit, recovery_out, "",
+                         final_inv=0)
         victim = subprocess.Popen(agent_cmd(cell, run_seed, url, work, 0),
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         deadline = time.time() + kill_wait_s
@@ -99,49 +114,55 @@ def run_once(cell, run_seed, kill_wait_s, recovery_timeout_s):
             except subprocess.TimeoutExpired:
                 recovery_exit = -2
 
-        ledger = read_jsonl(store / "ledger.jsonl")
-        trace = read_jsonl(work / "trace.jsonl")
-        credits = [e for e in ledger if e["type"] == "credit"]
-        credit_calls = [e for e in trace if e["kind"] == "tool_call" and e["name"] == "issue_service_credit"]
-        expected = EXPECTED_CASES[cell.get("task", "credit")]
-        per_case = {c: sum(1 for e in credits if str(e["caseId"]) == c) for c in expected}
-        notified_cases = set()
-        for e in trace:
-            if e["kind"] == "tool_result" and e["name"] == "notify_customer":
-                try:
-                    res = json.loads(e["result"])
-                except json.JSONDecodeError:
-                    continue
-                if res.get("notified") is True:
-                    notified_cases.add(str(res.get("caseId")))
-        notified = all(c in notified_cases for c in expected)
-        reasked = any(e["kind"] == "model" and e["inv"] == 1 and
-                      any(c["name"] == "issue_service_credit" for c in e["tool_calls"]) for e in trace)
-        completed = recovery_exit == 0 and notified
-        lost = completed and any(n == 0 for n in per_case.values())
-        return {
-            **cell, "seed": run_seed,
-            "kill_triggered": killed,
-            "credits": len(credits),
-            "credit_keys": [c["key"] for c in credits],
-            "credit_amounts": sorted({c["amountUsd"] for c in credits}),
-            "credit_calls": [{"inv": c["inv"], "key": c["key"], "arguments": c["arguments"]}
-                             for c in credit_calls],
-            "recovery_reasked_for_credit": reasked,
-            "recovery_exit": recovery_exit,
-            "completed": completed,
-            "credits_per_case": per_case,
-            "correct": completed and all(n == 1 for n in per_case.values()) and len(credits) == len(expected),
-            "duplicate": any(n > 1 for n in per_case.values()),
-            "lost_effect": lost,
-            "model_calls": sum(e["kind"] == "model" for e in trace),
-            "victim_tail": "" if killed else victim.stdout.read()[-300:],
-            "recovery_tail": recovery_out[-300:],
-        }
+        return score(cell, run_seed, store, work, killed, recovery_exit, recovery_out,
+                     "" if killed else victim.stdout.read()[-300:], final_inv=1)
     finally:
         server.kill()
         server.wait()
         shutil.rmtree(work, ignore_errors=True)
+
+
+def score(cell, run_seed, store, work, killed, recovery_exit, recovery_out, victim_tail, final_inv):
+    ledger = read_jsonl(store / "ledger.jsonl")
+    trace = read_jsonl(work / "trace.jsonl")
+    credits = [e for e in ledger if e["type"] == "credit"]
+    credit_calls = [e for e in trace if e["kind"] == "tool_call" and e["name"] == "issue_service_credit"]
+    expected = EXPECTED_CASES[cell.get("task", "credit")]
+    per_case = {c: sum(1 for e in credits if str(e["caseId"]) == c) for c in expected}
+    notified_cases = set()
+    for e in trace:
+        if e["kind"] == "tool_result" and e["name"] == "notify_customer":
+            try:
+                res = json.loads(e["result"])
+            except json.JSONDecodeError:
+                continue
+            if res.get("notified") is True:
+                notified_cases.add(str(res.get("caseId")))
+    notified = all(c in notified_cases for c in expected)
+    reasked = any(e["kind"] == "model" and e["inv"] == final_inv and final_inv == 1 and
+                  any(c["name"] == "issue_service_credit" for c in e["tool_calls"]) for e in trace)
+    completed = recovery_exit == 0 and notified
+    lost = completed and any(n == 0 for n in per_case.values())
+    return {
+        **cell, "seed": run_seed,
+        "reached_credit": any(e["kind"] == "tool_call" and e["name"] == "issue_service_credit" for e in trace),
+        "kill_triggered": killed,
+        "credits": len(credits),
+        "credit_keys": [c["key"] for c in credits],
+        "credit_amounts": sorted({c["amountUsd"] for c in credits}),
+        "credit_calls": [{"inv": c["inv"], "key": c["key"], "arguments": c["arguments"]}
+                         for c in credit_calls],
+        "recovery_reasked_for_credit": reasked,
+        "recovery_exit": recovery_exit,
+        "completed": completed,
+        "credits_per_case": per_case,
+        "correct": completed and all(n == 1 for n in per_case.values()) and len(credits) == len(expected),
+        "duplicate": any(n > 1 for n in per_case.values()),
+        "lost_effect": lost,
+        "model_calls": sum(e["kind"] == "model" for e in trace),
+        "victim_tail": victim_tail,
+        "recovery_tail": recovery_out[-300:],
+    }
 
 
 def cells(config):
@@ -180,7 +201,8 @@ def main():
             if row_key({**cell, "seed": config["base_seed"] + i}) not in done]
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(run_once, cell, seed, config["kill_wait_s"],
-                               config["recovery_timeout_s"]): (cell, seed) for cell, seed in jobs}
+                               config["recovery_timeout_s"], config.get("fault", "after_effect")): (cell, seed)
+                   for cell, seed in jobs}
         for count, fut in enumerate(concurrent.futures.as_completed(futures), 1):
             row = fut.result()
             with out.open("a") as f:

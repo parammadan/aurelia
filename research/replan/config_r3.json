@@ -1,0 +1,15 @@
+{
+  "status": "DRAFT R3 - not approved; see docs/research/preregistration-r3.md",
+  "fault": "none",
+  "factors": {
+    "task": ["credit", "memo", "two"],
+    "model": ["qwen2.5:3b", "llama3.2:3b"],
+    "granularity": ["step"],
+    "keys": ["tool_call_id", "args_hash", "position"],
+    "temperature": [0.0, 0.7, 1.0]
+  },
+  "n_per_cell": 30,
+  "base_seed": 1000,
+  "kill_wait_s": 180,
+  "recovery_timeout_s": 300
+}
