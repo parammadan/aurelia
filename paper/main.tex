@@ -76,9 +76,28 @@ legitimate effect.
 \end{enumerate}
 
 \section{Background}
-\todo{Durable execution and deterministic replay; sagas and compensation;
-idempotency keys and exactly-once processing; tool-calling agents and
-provider-assigned call ids. Citations pending LibKey resolution.}
+\paragraph{Durable execution.} Workflow engines make long-running programs
+survive crashes by recording the result of every external call in a history
+and, on recovery, re-running the orchestration code while substituting
+recorded results for the calls it already made. Azure Durable Functions
+formalizes these semantics~\cite{burckhardt2021durable}. DBOS builds the
+same guarantee on a transactional database~\cite{skiadopoulos2021dbos}. Both
+require the orchestration code to be \emph{deterministic}: re-running it must
+reach the same calls in the same order, or the recorded history no longer
+lines up.
+
+\paragraph{Side effects and compensation.} A side effect that cannot be
+rolled back is either made idempotent, deduplicated under a key, or undone by
+a compensating action, as in sagas~\cite{garciamolina1987sagas}.
+Exactly-once processing in stream systems rests on the same two pieces,
+deterministic keys and durable records of what was
+processed~\cite{akidau2013millwheel,carbone2017flink}.
+
+\paragraph{Tool-calling agents.} An LLM agent alternates model calls, which
+choose tool calls and arguments, with tool executions whose results go back
+into the model's context~\cite{yao2022react}. Providers give every tool call
+an identifier, which is fresh on every request. The control flow, the very
+thing durable execution needs to be deterministic, is the model's output.
 
 \section{A taxonomy of agent recovery}
 \label{sec:taxonomy}
@@ -155,7 +174,9 @@ unedited; we report every prediction, including falsified ones.
 \paragraph{Outcomes.} \emph{Duplicate}: more than one ledger credit for a
 case. \emph{Lost effect}: the run reports success but the ledger lacks a
 credit for a named case. Rates are over runs in which the kill fired; runs in
-which it did not are reported per cell. Intervals are Wilson 95\%.
+which it did not are reported per cell. Intervals are Wilson
+95\%~\cite{wilson1927}; differences between rounds use Newcombe's
+interval~\cite{newcombe1998}.
 
 \section{Results}
 \label{sec:results}
@@ -278,8 +299,22 @@ builds a step-recording runtime. Code, configuration, raw data, and both
 pre-registrations are public.
 
 \section{Related work}
-\todo{Pending LibKey: durable-execution systems, workflow replay, sagas,
-exactly-once stream processing, agent reliability and fault-injection
-benchmarks.}
+Durable-execution semantics~\cite{burckhardt2021durable,skiadopoulos2021dbos}
+assume deterministic orchestration. This paper measures what happens when the
+orchestrator is a model and the assumption is dropped. Exactly-once stream
+processing~\cite{akidau2013millwheel,carbone2017flink} gets its guarantee
+from deterministic record identities, the property provider-assigned tool-call
+ids lack. Sagas~\cite{garciamolina1987sagas} handle effects that cannot be
+deduplicated. Our lost-effect results show that the wrong deduplication key
+can do harm in the other direction, too. Agent benchmarks such as
+$\tau$-bench~\cite{yao2024taubench} measure task success and consistency over
+repeated trials. We measure a narrower property, side-effect correctness
+under a physical crash, and separate model errors from recovery errors with
+a crash-free control. The correctness condition we propose for future work is
+modelled on linearizability~\cite{herlihy1990linearizability}, and we plan to
+specify it in TLA~\cite{lamport1994tla}.
+
+\bibliographystyle{plain}
+\bibliography{refs}
 
 \end{document}
