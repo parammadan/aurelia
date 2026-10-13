@@ -25,7 +25,7 @@ start_ollama() {
 warm_models() {
     for m in qwen2.5:3b llama3.2:3b; do
         curl -sf --max-time 300 "http://$OLLAMA_HOST/api/generate" \
-            -d "{\"model\":\"$m\",\"prompt\":\"hi\",\"stream\":false,\"keep_alive\":\"60m\"}" >/dev/null \
+            -d "{\"model\":\"$m\",\"prompt\":\"hi\",\"stream\":false,\"keep_alive\":\"60m\",\"options\":{\"num_predict\":1}}" >/dev/null \
             || { echo "warm $m failed"; return 1; }
     done
 }
