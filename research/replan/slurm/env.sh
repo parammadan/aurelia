@@ -6,6 +6,8 @@ export PATH=$R/dotnet:$PATH DOTNET_ROOT=$R/dotnet DOTNET_CLI_TELEMETRY_OPTOUT=1
 # leave an allocated GPU idle).
 export OLLAMA_MODELS=${TMPDIR:-/tmp}/aurelia-r2-models-$SLURM_JOB_ID OLLAMA_HOST=127.0.0.1:$((11400 + SLURM_JOB_ID % 500))
 export OLLAMA_KEEP_ALIVE=60m
+# Vulkan exposes GPUs Slurm did not allocate to this job; use CUDA only.
+export OLLAMA_VULKAN=0
 export MODEL_ENDPOINT=http://$OLLAMA_HOST/v1
 # The cluster sets http(s)_proxy; local servers must bypass it.
 export no_proxy=127.0.0.1,localhost NO_PROXY=127.0.0.1,localhost
