@@ -17,7 +17,7 @@
 \title{Recovery That Re-Asks the Model:\\
 Duplicate and Lost Side Effects in Crash-Recovered LLM Agents}
 \author{Param Madan\\Northeastern University\\\texttt{madan.pa@northeastern.edu}}
-\date{\todo{date}}
+\date{October 2026}
 
 \begin{document}
 \maketitle
@@ -33,8 +33,14 @@ idempotency-key scheme, silently drop them. We separate two design axes that
 are usually conflated, \emph{recording granularity} (is the model's decision
 durable before it is acted on?) and \emph{key derivation} (provider tool-call
 id, argument hash, or position), and measure their interaction under a
-physical after-effect crash in two pre-registered rounds
-\todo{N runs, task shapes, results sentence}. A survey of the official
+physical after-effect crash in three pre-registered rounds (5,940 runs; three
+task shapes; two open 3B models; three temperatures), including a crash-free
+control. Against that control, turn recording with provider call ids added
+82--97 percentage points of duplicate side effects in every task; argument
+hashes added 80 points once the model wrote an argument itself; and position
+keys added 8 points of silently lost effects in multi-effect turns. Under
+step recording, failure rates after a crash were statistically
+indistinguishable from crash-free runs in every condition. A survey of the official
 documentation of 15 agent-framework configurations finds that the
 durable-execution engines prescribe step recording, while agent-SDK session
 stores and several quickstarts give turn recording or none, and no framework
@@ -248,7 +254,31 @@ model: crediting a case again (often to correct an amount), or reporting
 success for a case it never credited. H1 as written did not separate
 recovery errors from model errors. Whether model errors are \emph{more
 frequent} after a crash is measured by Round~3, a crash-free control
-pre-registered after these results. \todo{Round 3 results.}
+pre-registered after these results (\S\ref{sec:r3}).
+
+\subsection{Round 3: crash-free control}
+\label{sec:r3}
+Round~3 ran the Round~2 agent, models, seeds, and hardware with no fault
+(1,620 runs; 1,053 reached the credit tool). Table~\ref{tab:r3} compares each
+recovered condition with its crash-free counterpart. All three
+pre-registered hypotheses held.
+
+\begin{itemize}
+  \item \textbf{Step recording adds nothing measurable} (R3-H1). In all nine
+        task/key cells, the 95\% intervals for both the duplicate and the
+        lost-effect difference include zero. The model errors seen under
+        step recording in Round~2 occur at the same rate when nothing
+        crashes.
+  \item \textbf{Turn recording adds duplicates} (R3-H2): $+97$, $+96$, and
+        $+82$ points with provider ids in \emph{credit}, \emph{memo}, and
+        \emph{two}; $+80$ and $+21$ points with argument hashes in
+        \emph{memo} and \emph{two}.
+  \item \textbf{Position keys trade duplicates for lost effects:} in
+        \emph{two}, turn recovery with position keys adds $+8$ points of lost
+        effects $[+2, +14]$ and no significant duplicates.
+  \item Without a crash, argument hashes never duplicate more than provider
+        ids (R3-H3): they deduplicate a model's identical repeat calls.
+\end{itemize}
 
 \paragraph{Turn vs.\ step, task \emph{two}.} Pooled over keys and
 temperatures, qwen2.5:3b duplicated in 123 of 265 turn-recorded recoveries
@@ -308,8 +338,8 @@ making a new, wrong decision later in the same run, and our 3B models often
 did: repeated credits, wrong amounts, success reported for effects that
 never happened. Those are errors of task correctness, and need checks at the
 effect boundary, such as per-case ledger invariants or amount validation,
-rather than a recovery mechanism. \todo{Round 3: whether such errors are more
-frequent after a crash.}
+rather than a recovery mechanism. Round~3 shows that under step recording
+these errors are no more frequent after a crash than without one.
 
 \paragraph{Cost.} Step recording adds one durable write per model response
 before its tool calls execute. We did not measure that cost here.
