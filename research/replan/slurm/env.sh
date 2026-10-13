@@ -8,6 +8,9 @@ export OLLAMA_MODELS=${TMPDIR:-/tmp}/aurelia-r2-models-$SLURM_JOB_ID OLLAMA_HOST
 export OLLAMA_KEEP_ALIVE=60m
 # Vulkan exposes GPUs Slurm did not allocate to this job; use CUDA only.
 export OLLAMA_VULKAN=0
+# Match R1 (Mac Ollama used n_ctx 4096/slot). The A100's VRAM-based default is
+# 32768/slot, which with 16 slots pushed llama3.2 mostly onto the CPU.
+export OLLAMA_CONTEXT_LENGTH=4096
 export MODEL_ENDPOINT=http://$OLLAMA_HOST/v1
 # The cluster sets http(s)_proxy; local servers must bypass it.
 export no_proxy=127.0.0.1,localhost NO_PROXY=127.0.0.1,localhost

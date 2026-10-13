@@ -68,3 +68,17 @@ already records (`credit_calls`, `credit_keys`).
    asks the model to decide the *second* case, so `recovery_reasked_for_credit`
    is true even under step recording. Re-ask is reported for `credit` and
    `memo` only; for `two` the column shows "n/a".
+
+## Amendment A2 — 2026-10-13, aborted attempt and context-length fix
+
+The first R2 job (Slurm 11037866) was **cancelled after 9 minutes and its
+540 rows are discarded, not analyzed**: Ollama's VRAM-based default gave each
+of the 16 slots a 32,768-token context, which did not fit llama3.2:3b on the
+40 GB A100, so it silently ran mostly on CPU (≈21 prompt tokens/s); its runs
+would have timed out into infrastructure-caused exclusions. The aborted rows
+are kept for audit at `research/replan/data/r2-aborted-11037866.jsonl`.
+
+Fix: `OLLAMA_CONTEXT_LENGTH=4096`, the value R1's Mac Ollama used
+(`n_ctx_slot = 4096` in its server log). Prompts in all three tasks are
+well under this. The full R2 (3,240 runs) is rerun from scratch under the
+fixed configuration; no row from the aborted attempt is reused.
