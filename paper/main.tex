@@ -40,7 +40,7 @@ control. Against that control, turn recording with provider call ids added
 hashes added 80 points once the model wrote an argument itself; and position
 keys added 8 points of silently lost effects in multi-effect turns. Under
 step recording, failure rates after a crash were statistically
-indistinguishable from crash-free runs in every condition. A survey of the official
+indistinguishable from crash-free runs in all nine task/key conditions. A survey of the official
 documentation of 15 agent-framework configurations finds that the
 durable-execution engines prescribe step recording, while agent-SDK session
 stores and several quickstarts give turn recording or none, and no framework
@@ -74,7 +74,7 @@ legitimate effect.
   \item A taxonomy of agent recovery along two axes, recording granularity and
         key derivation, with the condition under which each pair is
         exactly-once (\S\ref{sec:taxonomy}).
-  \item Two pre-registered measurement rounds under a physical after-effect
+  \item Three pre-registered measurement rounds under a physical after-effect
         crash, with predictions committed before data (\S\ref{sec:method},
         \S\ref{sec:results}).
   \item A survey of what agent frameworks' official documentation prescribes
@@ -172,12 +172,18 @@ model.
 The per-request seed differs between the crashed and the recovering
 invocation, as in production, and is reproducible from the run seed.
 
-\paragraph{Pre-registration.} Round~1 (credit, Apple~M1, serial; 1,080 runs)
-and Round~2 (all three tasks, one NVIDIA A100, 16 concurrent runs; 3,240
-runs, including a hardware replication of Round~1) were each pre-registered
-with predictions, outcomes, exclusions, and analysis before any measured run.
-The Round~1 predictions were drafted with an AI coding assistant and approved
-unedited; we report every prediction, including falsified ones.
+\paragraph{Pre-registration.} Round~1 (credit, Apple~M1, serial; 1,080 runs),
+Round~2 (all three tasks, one NVIDIA A100, 16 concurrent runs; 3,240 runs,
+including a hardware replication of Round~1), and Round~3 (the Round~2 setup
+with no fault; 1,620 runs) were each pre-registered with predictions,
+outcomes, exclusions, and analysis before any measured run. Round~3 was
+designed \emph{after} Round~2's results were seen, to separate model errors
+from recovery errors, and its pre-registration says so. All predictions were
+drafted with an AI coding assistant and approved unedited by the author. We
+report every prediction, including falsified ones. Two analysis-only
+amendments and one aborted, discarded Round~2 job (an inference-server
+misconfiguration) are documented with timestamps that precede the data they
+affect.
 
 \paragraph{Outcomes.} \emph{Duplicate}: more than one ledger credit for a
 case. \emph{Lost effect}: the run reports success but the ledger lacks a
@@ -373,6 +379,13 @@ under a physical crash, and separate model errors from recovery errors with
 a crash-free control. The correctness condition we propose for future work is
 modelled on linearizability~\cite{herlihy1990linearizability}, and we plan to
 specify it in TLA~\cite{lamport1994tla}.
+
+\section*{Use of AI assistance}
+The experiment harness, analysis scripts, framework survey, and draft text
+were produced with an AI coding assistant (Claude) under the author's
+direction. The author reviewed the design, approved each pre-registration
+and every GPU job, and is responsible for all content. All numbers are
+generated from the raw per-run data by scripts in the repository.
 
 \bibliographystyle{plain}
 \bibliography{refs}
