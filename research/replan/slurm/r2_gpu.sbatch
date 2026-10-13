@@ -9,10 +9,7 @@ export OLLAMA_NUM_PARALLEL=16 OLLAMA_MAX_LOADED_MODELS=2
 cd /scratch/madan.pa/aurelia-r2/code/research/replan
 nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
 start_ollama /scratch/madan.pa/aurelia-r2/r2-ollama-$SLURM_JOB_ID.log || exit 1
-# Warm both models so the first runs don't time out on load.
-for m in qwen2.5:3b llama3.2:3b; do
-    curl -sf "http://$OLLAMA_HOST/api/generate" -d "{\"model\":\"$m\",\"prompt\":\"hi\",\"stream\":false}" >/dev/null || exit 1
-done
+trap cleanup EXIT
+warm_models || exit 1
 mkdir -p data
 python3 -I run_study.py --config config_r2.json --out data/r2.jsonl --workers 16
-kill $OLLAMA_PID
