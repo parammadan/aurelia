@@ -122,3 +122,54 @@ Source: `data/r2.jsonl` · 3240 runs · analysis per the approved R2 pre-registr
 | R2-H3 | memo, turn+position: ≤ 10% every cell | ✅ held | 0%–0% |
 | R2-H4 | two, turn+position: lost effect > 0 at T ≥ 0.7 | ✅ held | 20 lost across 168 runs |
 | R2-H5 | two, turn+args_hash: ≤ 10% duplicates every cell | ❌ falsified | 3%–68% |
+
+## Notes (written by hand after the automated analysis above; not part of it)
+
+### R2-H6: replicating R1 on the cluster
+Running R1's own analysis (`analyze.py`) on R2's `credit` rows:
+
+- **All rows: R2-H6 is falsified as written.** On the cluster H2 and H5 come
+  out falsified (H1, H3, H4 held). The cause: llama3.2:3b reached the fault in
+  9 / 540 credit runs here (0 / 540 on the Mac), and cells with n = 1 or 2
+  show 0% duplicates and 0% re-ask.
+- **qwen2.5:3b only (exploratory): every R1 verdict is reproduced** (H1–H5
+  held, same 100% / 0% values).
+
+### R2-H1 (falsified): what the 44 step-recording failures are (exploratory)
+In **44 / 44** step-recording runs with a duplicate or a lost effect,
+recovery re-executed the recorded credit call under its **recorded key**,
+and the ledger deduplicated it. The failure came afterwards:
+
+- **23 duplicates:** the model later made a *new* credit decision for a case
+  it had already credited (e.g. re-crediting case 7 with a corrected amount).
+- **21 lost effects:** the run ended with a notification and a success reply
+  while a named case was never credited. In 10 of these the model later made
+  another credit decision; in 11 it made none.
+
+So these are model errors that happen after recovery, not errors made by
+recovery. Whether they happen *more often* after a crash than without one is
+what R3 (crash-free control, pre-registered after these results) measures.
+H1 stays falsified: it was written as "0 failures" and did not separate the
+two.
+
+### Other observations (exploratory)
+- **memo, turn + args_hash, qwen, T = 0: 53% duplicates.** In 16 / 30
+  re-asks at temperature 0 the model wrote a different `reason`, so the
+  hash changed. R2 serves 16 concurrent requests per GPU; this round alone
+  cannot say whether the T = 0 divergence comes from batched serving or
+  from the change of seed between invocations.
+- **two, turn + position: lost effects occur** (R2-H4 held), mostly with
+  llama3.2:3b at T ≥ 0.7, as predicted: a re-asked model takes the cases in a
+  different order, the ordinal key collides, and the ledger drops a real
+  credit.
+- **Wrong amounts are common in `two`** (amendment A1): both models often
+  credit $50 (the sum) or a made-up figure for a case. The `correct` column
+  does not check amounts; `wrong amount` does.
+- llama3.2:3b frequently writes tool calls as plain text, as in R1, so many
+  llama cells have few or no kill-triggered runs (see the "excl." column).
+
+### Deviations
+- The first R2 job (11037866) was aborted and discarded
+  (amendment A2); the measured R2 is job 11038062. It ran on an **A100-SXM4-80GB** (node d1028). The prereg
+  says "one NVIDIA A100" without a memory size; the GPU smoke tests ran on
+  40 GB A100s.
