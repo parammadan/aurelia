@@ -272,11 +272,14 @@ says about idempotency keys. The full table, quotations, and URLs are in
   \item \textbf{Turn} is what agent-SDK session stores give: OpenAI Agents
         SDK Sessions (``After each run''), AutoGen's manual
         \texttt{save\_state}, and Microsoft Agent Framework's workflow
-        checkpoints for agent executors. From its samples, Microsoft's
-        Durable Task extension for Agent Framework appears to persist once
-        per agent run. The same documentation describes a step-granular
-        orchestration loop as an alternative. \todo{re-verify the Durable
-        Task extension wording against the docs before submission.}
+        checkpoints for agent executors. Microsoft's Durable Task extension for
+        Agent Framework ``internally implements entity-based agent loops,''
+        in which ``the agent framework manages the loop; the entity provides
+        session persistence'' and ``persists conversation state across
+        interactions.'' The documentation does not describe recording the
+        model's tool-call decisions \emph{within} an agent run. The same
+        documentation also presents an orchestration-based loop that runs
+        tool calls as activities, which is step-granular.
   \item \textbf{Quickstarts mostly give none or turn}, through in-memory
         stores or opt-in durability.
   \item \textbf{No framework names \texttt{tool\_call\_id} as the
