@@ -1,0 +1,192 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlist{nosep}
+
+% Draft markers: every \todo must be gone before arXiv submission.
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\title{Recovery That Re-Asks the Model:\\
+Duplicate and Lost Side Effects in Crash-Recovered LLM Agents}
+\author{Param Madan\\Northeastern University\\\texttt{madan.pa@northeastern.edu}}
+\date{\todo{date}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Durable-execution systems make crash recovery correct by replaying
+deterministic code against recorded results. LLM agents break this premise:
+the code that decides which side effects to perform is a model whose answer
+is not reproducible across requests. We show that recovery schemes that
+\emph{re-ask the model} for a decision the crashed process had already
+received can execute side effects twice or, depending on the
+idempotency-key scheme, silently drop them. We separate two design axes that
+are usually conflated, \emph{recording granularity} (is the model's decision
+durable before it is acted on?) and \emph{key derivation} (provider tool-call
+id, argument hash, or position), and measure their interaction under a
+physical after-effect crash in two pre-registered rounds
+\todo{N runs, task shapes, results sentence}. A survey of the official
+documentation of 15 agent-framework configurations finds
+\todo{survey sentence}. We argue that recording the model's decision before
+acting is a correctness requirement, not an optimization, and outline a
+correctness condition for recovered agent runs.
+\end{abstract}
+
+\section{Introduction}
+
+A customer-service agent looks up a case, decides to issue a \$25 service
+credit, and calls the ledger. The ledger writes the credit. Before the
+response reaches the agent, its process is killed. A recovery process starts
+the turn over: it sends the same conversation to the model, the model decides
+again to issue the credit, and the provider assigns the new tool call a new
+identifier. If that identifier is the idempotency key, the ledger now holds
+two credits.
+
+Idempotency keys are the standard defense against retried side effects, but
+a key identifies a \emph{decision}. When recovery causes the decision to be
+made again, the key is made again too, and whether it matches depends on
+whether the new decision is identical to the old one \emph{in whatever the key
+scheme looks at}. Provider call ids are fresh on every request; argument
+hashes change whenever the model writes any argument in its own words;
+position-based keys break when the model changes the number or order of its
+effects, and in that case they fail in the other direction, by suppressing a
+legitimate effect.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item A taxonomy of agent recovery along two axes, recording granularity and
+        key derivation, with the condition under which each pair is
+        exactly-once (\S\ref{sec:taxonomy}).
+  \item Two pre-registered measurement rounds under a physical after-effect
+        crash, with predictions committed before data (\S\ref{sec:method},
+        \S\ref{sec:results}).
+  \item A survey of what agent frameworks' official documentation prescribes
+        (\S\ref{sec:survey}).
+  \item An open harness, raw per-run data, and both pre-registrations.
+        \todo{repository URL once public}
+\end{enumerate}
+
+\section{Background}
+\todo{Durable execution and deterministic replay; sagas and compensation;
+idempotency keys and exactly-once processing; tool-calling agents and
+provider-assigned call ids. Citations pending LibKey resolution.}
+
+\section{A taxonomy of agent recovery}
+\label{sec:taxonomy}
+
+\paragraph{Recording granularity.} Under \emph{step} recording, every model
+response, including the tool calls it chose, is durable before any of those
+calls execute, and every tool result is durable when it returns. Recovery
+reuses recorded responses and re-executes only calls whose results are
+missing. Under \emph{turn} recording, state is persisted when a turn or run
+completes; a crash inside the turn loses the model's decision, and recovery
+asks the model again.
+
+\paragraph{Key derivation.} \texttt{tool\_call\_id} uses the identifier the
+model provider assigns to the call. \texttt{args\_hash} hashes the task id,
+tool name, and canonicalized arguments. \texttt{position} combines the task
+id, tool name, and the ordinal of that tool's call within the run.
+
+\begin{table}[t]
+\centering
+\begin{tabularx}{\linewidth}{lXXX}
+\toprule
+ & \texttt{tool\_call\_id} & \texttt{args\_hash} & \texttt{position} \\
+\midrule
+step & safe & safe & safe \\
+turn & unsafe: a new id per request & unsafe when the model authors any argument
+     & unsafe when the number or order of effects can change; drops effects \\
+\bottomrule
+\end{tabularx}
+\caption{Predicted safety of each granularity/key pair under an after-effect
+crash. \S\ref{sec:results} tests every cell.}
+\label{tab:taxonomy}
+\end{table}
+
+\paragraph{Why step recording makes the key irrelevant.} Under step recording
+the call being retried is the \emph{same recorded call}, so any deterministic
+function of it (its provider id, its arguments, or its position) yields the
+same key on retry. Under turn recording the retried call is a \emph{new}
+decision, and exactly-once holds only when the new decision agrees with the
+old one on every input to the key function.
+
+\section{Method}
+\label{sec:method}
+
+\paragraph{Harness.} The tool server owns the ledger (ground truth), which
+deduplicates by idempotency key. The after-effect fault: the server writes
+the credit, then holds the response; the harness kills the agent process
+with \texttt{SIGKILL}, releases the hold, and runs the agent's recovery (the
+same command) once. Scoring reads only the ledger and an append-only
+observation trace the agent never reads.
+
+\paragraph{Study agent.} One neutral, roughly 200-line tool-calling agent
+implements both granularities and all three key schemes, so the comparison is
+between recording disciplines rather than products. The author also builds a
+durable runtime (Aurelia) that uses step recording; that runtime is
+deliberately \emph{not} a contestant.
+
+\paragraph{Tasks.} \emph{credit}: one case, every tool argument copied from a
+tool result. \emph{memo}: as credit, plus a required customer-facing reason
+the model writes. \emph{two}: two cases in one request, order chosen by the
+model.
+
+\paragraph{Models and sampling.} \texttt{qwen2.5:3b} and
+\texttt{llama3.2:3b} served by Ollama~0.32.5 at temperatures 0, 0.7, and 1.0.
+The per-request seed differs between the crashed and the recovering
+invocation, as in production, and is reproducible from the run seed.
+
+\paragraph{Pre-registration.} Round~1 (credit, Apple~M1, serial; 1,080 runs)
+and Round~2 (all three tasks, one NVIDIA A100, 16 concurrent runs; 3,240
+runs, including a hardware replication of Round~1) were each pre-registered
+with predictions, outcomes, exclusions, and analysis before any measured run.
+The Round~1 predictions were drafted with an AI coding assistant and approved
+unedited; we report every prediction, including falsified ones.
+
+\paragraph{Outcomes.} \emph{Duplicate}: more than one ledger credit for a
+case. \emph{Lost effect}: the run reports success but the ledger lacks a
+credit for a named case. Rates are over runs in which the kill fired; runs in
+which it did not are reported per cell. Intervals are Wilson 95\%.
+
+\section{Results}
+\label{sec:results}
+\todo{Round 1 table and hypothesis verdicts from results-r1.md.}
+
+\todo{Round 2 tables and verdicts from results-r2.md, falsified predictions
+first.}
+
+\section{What frameworks document}
+\label{sec:survey}
+\todo{From rq4-survey.md: step for the durable-execution engines and their
+integrations; turn for agent-SDK session stores and Microsoft's Durable Task
+extension for Agent Framework (inferred from samples; re-verify wording);
+quickstarts mostly none or turn; no framework names tool\_call\_id as a key.
+Access date 2026-10-12.}
+
+\section{Discussion}
+\todo{Implications for framework defaults and docs; cost of step recording;
+towards a correctness condition: a recovered run is correct iff its effect
+history equals that of some crash-free run of the same agent.}
+
+\section{Threats to validity}
+Small open models; one domain; we implement the patterns frameworks
+document rather than running every framework's code; Round~2 uses different
+hardware and concurrent decoding (hence the replication task); the author
+builds a step-recording runtime. Code, configuration, raw data, and both
+pre-registrations are public.
+
+\section{Related work}
+\todo{Pending LibKey: durable-execution systems, workflow replay, sagas,
+exactly-once stream processing, agent reliability and fault-injection
+benchmarks.}
+
+\end{document}
