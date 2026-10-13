@@ -159,18 +159,111 @@ which it did not are reported per cell. Intervals are Wilson 95\%.
 
 \section{Results}
 \label{sec:results}
-\todo{Round 1 table and hypothesis verdicts from results-r1.md.}
 
-\todo{Round 2 tables and verdicts from results-r2.md, falsified predictions
-first.}
+\input{tables.tex}
+
+We report every pre-registered prediction, falsified ones included. Full
+per-cell tables with Wilson intervals, exclusions, and deviations are in the
+repository (\texttt{docs/research/results-r1.md}, \texttt{results-r2.md}).
+
+\subsection{Model behaviour that limits what can be measured}
+llama3.2:3b reached the fault in \emph{none} of its 540 Round~1 runs: it
+usually wrote the tool call as plain text in the message
+(\texttt{\{"name": "issue\_service\_credit", ...\}}) rather than as a
+structured call, so no side effect happened and there was nothing to kill.
+On the cluster it reached the fault in only 9 of 540 \emph{credit} runs, but
+more often in \emph{two}. qwen2.5:3b reached the fault in 521 of 540
+Round~1 runs; most of the 19 exclusions ended the turn without calling the
+credit tool, in several cases telling the customer a credit identifier that
+was never issued. \textbf{Round~1's conclusions therefore rest on
+qwen2.5:3b alone.}
+
+\subsection{Round 1: arguments copied from tool results}
+All five pre-registered hypotheses that had data held
+(Table~\ref{tab:r1}). Under turn recording with provider call ids, every
+recovered run duplicated the credit (87 of 87 kill-triggered runs). Every
+other granularity/key pair produced zero duplicates. Re-asking happened in
+every turn-recorded recovery and in no step-recorded one. The
+argument-hash and position keys survived re-asking here because the model
+copied every argument from a tool result, so the repeated decision was
+identical.
+
+\subsection{Round 2: model-authored arguments and multi-effect turns}
+Round~2 re-ran the credit task on the cluster. For qwen2.5:3b it reproduced
+every Round~1 verdict. As written, the replication hypothesis (R2-H6) is
+\textbf{falsified}: llama's few kill-triggered credit runs (cells with
+$n \le 2$) flip two verdicts.
+
+\paragraph{Argument hashes fail once the model writes an argument.} In
+\emph{memo}, turn recording with \texttt{args\_hash} duplicated the credit in
+53\%, 97\%, and 97\% of qwen's recoveries at $T = 0, 0.7, 1.0$
+(Table~\ref{tab:r2dup}). The model rewrote the free-text \texttt{reason}, so
+the hash changed. Our prediction R2-H2 (${\le}10\%$ at $T{=}0$) was
+\textbf{falsified}: even at temperature zero, a re-asked model wrote a
+different reason in 16 of 30 runs. Round~2 serves 16 concurrent requests per
+GPU and changes the seed between invocations; this design cannot tell which
+of the two causes the divergence. Position keys survived \emph{memo}
+(R2-H3 held).
+
+\paragraph{Position keys drop effects when the plan changes.} In \emph{two},
+turn recording with \texttt{position} keys produced lost effects (R2-H4
+held), most often with llama3.2:3b (Table~\ref{tab:r2lostllama3}). A
+re-asked model took the cases in a different order, the ordinal key
+collided with the recorded one, and the ledger dropped a real credit while
+the run reported success. Argument hashes also duplicated in \emph{two}
+(R2-H5 \textbf{falsified}: up to 68\% for qwen at $T{=}1$). In 35 of the 37
+duplicated runs, the re-asked decision for an already-credited case carried
+a \emph{different amount}; these 3B models often got amounts wrong.
+
+\paragraph{Step recording: recovery was correct; the model was not.} R2-H1
+predicted zero duplicates and zero lost effects under step recording. It was
+\textbf{falsified}: 23 duplicates and 21 lost effects across all step
+cells. In an exploratory look at all 44 runs, recovery re-executed the
+recorded call under its \emph{recorded} key every time, and the ledger
+deduplicated it. Every failure came from a \emph{later, new} decision by the
+model: crediting a case again (often to correct an amount), or reporting
+success for a case it never credited. H1 as written did not separate
+recovery errors from model errors. Whether model errors are \emph{more
+frequent} after a crash is measured by Round~3, a crash-free control
+pre-registered after these results. \todo{Round 3 results.}
+
+\paragraph{Turn vs.\ step, task \emph{two}.} Pooled over keys and
+temperatures, qwen2.5:3b duplicated in 123 of 265 turn-recorded recoveries
+versus 16 of 261 step-recorded ones; llama3.2:3b in 68 of 228 versus 4 of
+235, with lost effects in 29 of 228 versus 17 of 235.
 
 \section{What frameworks document}
 \label{sec:survey}
-\todo{From rq4-survey.md: step for the durable-execution engines and their
-integrations; turn for agent-SDK session stores and Microsoft's Durable Task
-extension for Agent Framework (inferred from samples; re-verify wording);
-quickstarts mostly none or turn; no framework names tool\_call\_id as a key.
-Access date 2026-10-12.}
+We read the official documentation and official repositories of 15
+agent-framework configurations on 2026-10-12, recording where each documented
+durable pattern makes the model's tool-call decision durable, and what it
+says about idempotency keys. The full table, quotations, and URLs are in
+\texttt{docs/research/rq4-survey.md}.
+
+\begin{itemize}
+  \item \textbf{Step} is what the durable-execution engines and their agent
+        integrations prescribe: Temporal (model and tool calls as separate
+        activities), DBOS, Restate, Inngest, Pydantic~AI on those engines,
+        the OpenAI Agents SDK with Temporal, and Google ADK with resumability
+        enabled. LangGraph reaches step through separate model and tool nodes
+        and per-super-step checkpoints, guaranteed only in its
+        \texttt{"sync"} durability mode.
+  \item \textbf{Turn} is what agent-SDK session stores give: OpenAI Agents
+        SDK Sessions (``After each run''), AutoGen's manual
+        \texttt{save\_state}, and Microsoft Agent Framework's workflow
+        checkpoints for agent executors. From its samples, Microsoft's
+        Durable Task extension for Agent Framework appears to persist once
+        per agent run. The same documentation describes a step-granular
+        orchestration loop as an alternative. \todo{re-verify the Durable
+        Task extension wording against the docs before submission.}
+  \item \textbf{Quickstarts mostly give none or turn}, through in-memory
+        stores or opt-in durability.
+  \item \textbf{No framework names \texttt{tool\_call\_id} as the
+        idempotency key}, the key that failed in every turn-recorded cell we
+        measured. Temporal names run id plus activity id; Restate names a
+        journaled random UUID; most others say ``make tools idempotent''
+        without naming a key.
+\end{itemize}
 
 \section{Discussion}
 \todo{Implications for framework defaults and docs; cost of step recording;
