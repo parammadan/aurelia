@@ -1,6 +1,8 @@
 # Paper 1 — pre-registration, round 3 (crash-free control)
 
-> **STATUS: DRAFT — NOT APPROVED.** Written 2026-10-13 after R2's results
+> **STATUS: APPROVED 2026-10-13** by Param (explicit "Approve R3 + GPU job"),
+> predictions as drafted by Claude, unedited. Frozen code: commit `bf1987a` on `research/r2`.
+> Written 2026-10-13 after R2's results
 > were seen. That is the reason R3 exists, and it is stated here plainly.
 
 ## Why R3 exists
@@ -35,7 +37,7 @@ Identical to R2 (same frozen agent, tool server, models and digests, Ollama
 Difference in rates between R2-recovered and R3 crash-free, with a Newcombe
 (Wilson-score) 95% interval for the difference of two proportions.
 
-## Predictions (Claude's draft — edit before approving)
+## Predictions
 
 | # | Prediction |
 |---|---|

@@ -1,5 +1,5 @@
 {
-  "status": "DRAFT R3 - not approved; see docs/research/preregistration-r3.md",
+  "status": "APPROVED R3 2026-10-13, frozen code bf1987a",
   "fault": "none",
   "factors": {
     "task": ["credit", "memo", "two"],
