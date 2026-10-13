@@ -7,7 +7,8 @@
 \usepackage{tabularx}
 \usepackage{amsmath}
 \usepackage{xcolor}
-\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 \usepackage{enumitem}
 \setlist{nosep}
 
@@ -304,17 +305,17 @@ says about idempotency keys. The full table, quotations, and URLs are in
         integrations prescribe: Temporal (model and tool calls as separate
         activities), DBOS, Restate, Inngest, Pydantic~AI on those engines,
         the OpenAI Agents SDK with Temporal, and Google ADK with resumability
-        enabled. LangGraph reaches step through separate model and tool nodes
+        enabled~\cite{doc_temporal_agentloop,doc_dbos_ai,doc_restate_agents,doc_adk_resume}. LangGraph reaches step through separate model and tool nodes
         and per-super-step checkpoints, guaranteed only in its
-        \texttt{"sync"} durability mode.
+        \texttt{"sync"} durability mode~\cite{doc_langgraph_persistence}.
   \item \textbf{Turn} is what agent-SDK session stores give: OpenAI Agents
-        SDK Sessions (``After each run''), AutoGen's manual
-        \texttt{save\_state}, and Microsoft Agent Framework's workflow
+        SDK Sessions (``After each run'')~\cite{doc_openai_sessions}, AutoGen's manual
+        \texttt{save\_state}~\cite{doc_autogen_state}, and Microsoft Agent Framework's workflow
         checkpoints for agent executors. Microsoft's Durable Task extension for
         Agent Framework ``internally implements entity-based agent loops,''
         in which ``the agent framework manages the loop; the entity provides
         session persistence'' and ``persists conversation state across
-        interactions.'' The documentation does not describe recording the
+        interactions''~\cite{doc_msft_durable_agents,doc_msft_patterns}. The documentation does not describe recording the
         model's tool-call decisions \emph{within} an agent run. The same
         documentation also presents an orchestration-based loop that runs
         tool calls as activities, which is step-granular.
@@ -322,7 +323,7 @@ says about idempotency keys. The full table, quotations, and URLs are in
         stores or opt-in durability.
   \item \textbf{No framework names \texttt{tool\_call\_id} as the
         idempotency key}, the key that failed in every turn-recorded cell we
-        measured. Temporal names run id plus activity id; Restate names a
+        measured. Temporal names run id plus activity id~\cite{doc_temporal_activity}; Restate names a
         journaled random UUID; most others say ``make tools idempotent''
         without naming a key.
 \end{itemize}
@@ -387,7 +388,7 @@ direction. The author reviewed the design, approved each pre-registration
 and every GPU job, and is responsible for all content. All numbers are
 generated from the raw per-run data by scripts in the repository.
 
-\bibliographystyle{plain}
+\bibliographystyle{plainurl}
 \bibliography{refs}
 
 \end{document}
